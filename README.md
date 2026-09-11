@@ -106,7 +106,8 @@ cd extension && npm install && npm run build
 ```
 
 Then load `extension/dist` unpacked at `chrome://extensions` with **Developer mode** on, and open
-SurfAI from the Side Panel. If your backend is not on port 8000, set the address in Settings.
+SurfAI from the Side Panel. It finds a local backend on the usual ports by itself; to point it at a
+hosted one, set the address in Settings.
 
 Try `explain how DNS works`, then open a page and try `summarise this`, then `save this page for
 later`. Serve `demo/` over HTTP for pages that exercise the acting path.
@@ -201,9 +202,15 @@ reads whichever is present and adds the psycopg driver prefix itself, so nothing
 needs copying by hand. Add a variable, then redeploy: Vercel bakes environment
 into a deployment, so existing ones do not pick up new values.
 
-Migrations are the one manual step. Vercel will not reveal a secret environment
-variable, and Alembic is excluded from the deployment to stay inside the lambda
-size limit, so run it locally against the same database:
+An **empty** database gets its schema on the first cold start, under an advisory
+lock, stamped with the revision it corresponds to. That covers a fresh
+deployment and nothing else: a database that already carries an
+`alembic_version` row is left alone even when it is behind, because guessing at
+an upgrade is how data gets lost.
+
+So later migrations are a manual step. Vercel will not reveal a secret
+environment variable, and Alembic is excluded from the deployment to stay inside
+the lambda size limit, so run it locally against the same database:
 
 ```bash
 cd backend
@@ -215,6 +222,10 @@ Use the **direct** (unpooled) string here, not the pooled one. Neon exposes it a
 Application traffic should still use the pooled URL, which is why the backend
 prefers it.
 
+`/health` lists any table the application expects and the database does not have,
+so a deployment that still needs migrating says so instead of failing one
+request at a time.
+
 Three things differ from the container path. All are handled in code, but they
 explain the shape of the configuration:
 
@@ -223,7 +234,8 @@ explain the shape of the configuration:
   `NullPool` when it detects Vercel, which is why the connection string should
   be a pooled one.
 - **No implicit schema creation.** Cold-start DDL would race between lambdas, so
-  it is skipped and migrations are the deliberate step above.
+  the only DDL that runs is the empty-database bootstrap above, and it takes an
+  advisory lock. Everything after that is Alembic's.
 - **The dependency list is smaller.** The root `requirements.txt` omits Uvicorn
   (Vercel invokes the ASGI app directly) and Alembic (migrations are separate).
   Both are megabytes against a hard lambda size limit. A test fails if the two
