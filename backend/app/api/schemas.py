@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +15,15 @@ class TabContext(BaseModel):
     tab_id: int | None = None
 
 
+class ChatTurn(BaseModel):
+    """One prior turn, replayed so a direct answer has conversational context."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(default="", max_length=4000)
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -22,6 +31,9 @@ class ChatRequest(BaseModel):
     page_context: dict[str, Any] = Field(default_factory=dict)
     tab_context: TabContext = Field(default_factory=TabContext)
     task_id: str | None = None
+    # Recent turns only. The backend holds no conversation state; the panel
+    # sends what it wants remembered, and the assistant caps it.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
 
 
 class ContinueRequest(BaseModel):

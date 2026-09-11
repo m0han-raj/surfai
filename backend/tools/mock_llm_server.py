@@ -52,8 +52,14 @@ def _find(prompt: str, pattern: str) -> str | None:
     return None
 
 
+_USER_SAID = re.compile(r'The user said: "(.*?)"', re.DOTALL)
+
+
 def _intent_response(prompt: str) -> dict:
-    lowered = prompt.lower()
+    # The system prompt names every category and gives examples, so matching
+    # against the whole prompt classifies everything as whatever appears first.
+    said = _USER_SAID.search(prompt)
+    lowered = (said.group(1) if said else prompt).lower()
     if re.search(r"\bsave (this|it)\b|save as my|remember this", lowered):
         return {"intent": "save_favourite", "goal": "save the current page"}
     listing = r"\b(my|saved) .{0,30}(favourite|favorite)s?\b.*\blist\b|what have i saved"
@@ -66,7 +72,17 @@ def _intent_response(prompt: str) -> dict:
             "favourite_reference": (reference.group(1).strip() if reference else ""),
             "goal": "run the saved task",
         }
-    return {"intent": "browse_task", "goal": "act on the current page"}
+    if re.search(r"\b(hi|hello|hey|thanks|thank you|good (morning|evening))\b", lowered):
+        return {"intent": "chitchat", "goal": "greeting"}
+    # Acting on the page needs an instruction to act. Everything else is a
+    # question, mirroring the real classifier's default.
+    if re.search(
+        r"\b(search for|search this|find me|filter|sort by|click|open the|"
+        r"fill in|go to|navigate|next page|scroll)\b",
+        lowered,
+    ):
+        return {"intent": "browse_task", "goal": "act on the current page"}
+    return {"intent": "question", "goal": "answer the user"}
 
 
 # Matches only real history lines ("  step 2: CLICK e2 -> ok"), not the word
@@ -128,6 +144,27 @@ def _favourite_draft(prompt: str) -> dict:
         "description": "Created by the mock LLM server",
         "preferences": {},
     }
+
+
+def _assistant_reply(prompt: str) -> str:
+    """A plain-text stand-in for a real model's answer."""
+    title = re.search(r"^Title: (.+)$", prompt, re.MULTILINE)
+
+    # The system prompt's trust rules name the envelope, so its mere presence
+    # proves nothing. This marker is written only when real page data follows.
+    if "The page the user is currently looking at:" in prompt:
+        where = f' ("{title.group(1).strip()}")' if title else ""
+        return (
+            f"I can see the page{where} and this is where a real model would "
+            "summarise it. The reply came from the mock LLM server, so the wording "
+            "is fixed. Point LLM_BASE_URL at a real runtime for genuine answers."
+        )
+    return (
+        "This is the mock LLM server, not a real model, so I cannot actually answer "
+        "that. The pipeline did work: your intent was classified, no page was read "
+        "because the question did not need one, and this came back as plain text. "
+        "Point LLM_BASE_URL at a real runtime for genuine answers."
+    )
 
 
 def build_response(schema_name: str, prompt: str) -> dict:
@@ -199,11 +236,16 @@ class Handler(BaseHTTPRequestHandler):
                 schema_name = "planner_decision"
             elif "classify what a SurfAI user wants" in prompt:
                 schema_name = "intent"
+            elif "helpful assistant that lives beside" in prompt:
+                schema_name = "assistant"
             elif "saved favourites" in prompt:
                 schema_name = "favourite_draft"
 
-        payload = build_response(schema_name, prompt)
-        content = json.dumps(payload)
+        # A direct answer is prose; everything else is a structured object.
+        if schema_name == "assistant":
+            content = _assistant_reply(prompt)
+        else:
+            content = json.dumps(build_response(schema_name, prompt))
         logger.debug("schema=%s -> %s", schema_name or "(inferred)", content)
 
         self._send(

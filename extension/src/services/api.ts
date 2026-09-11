@@ -119,6 +119,7 @@ export const api = {
     message: string;
     page_context: SemanticPage | Record<string, unknown>;
     tab_context: TabContext;
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   }) =>
     request<Directive>('/api/chat', {
       method: 'POST',

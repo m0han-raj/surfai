@@ -69,36 +69,19 @@ a:focus:not(:focus-visible) {
 }
 
 .app__brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   font-size: var(--text-md);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-.app__brand-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--fg-inverted);
-}
 
-.app__header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
 
 .app__nav {
   display: flex;
   gap: 2px;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
+  padding: var(--space-1) var(--space-2) calc(var(--space-1) + 2px);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
   flex-shrink: 0;
 }
 
@@ -113,15 +96,17 @@ a:focus:not(:focus-visible) {
 
 .tab {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 2px;
+  padding: 5px 4px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--fg-muted);
+  color: var(--fg-subtle);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
 }
@@ -132,9 +117,8 @@ a:focus:not(:focus-visible) {
 }
 
 .tab[aria-current='page'] {
-  background: var(--bg);
-  color: var(--fg);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--accent-subtle);
+  color: var(--accent);
 }
 
 /* --- buttons ------------------------------------------------------------ */
@@ -216,9 +200,6 @@ a:focus:not(:focus-visible) {
   color: var(--fg);
 }
 
-.button--block {
-  width: 100%;
-}
 
 .button--sm {
   padding: 4px 8px;
@@ -266,117 +247,103 @@ a:focus:not(:focus-visible) {
   padding: 0 var(--space-3) var(--space-3);
 }
 
-.section__count {
-  font-weight: 500;
-  color: var(--fg-subtle);
-  letter-spacing: 0;
-  text-transform: none;
-}
 
-/* --- current page ------------------------------------------------------- */
+/* --- header page chip ------------------------------------------------- */
 
-.page-card {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-}
-
-.page-card__domain {
+.app__header-right {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
-.page-card__title {
-  font-size: var(--text-sm);
+.pagechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 190px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
   color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.pagechip__label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.page-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.chip--accent {
-  border-color: var(--accent-border);
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
-/* --- chat --------------------------------------------------------------- */
-
-.chat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-}
-
-.message {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.message__role {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-xs);
-  font-weight: 600;
+.pagechip--muted {
   color: var(--fg-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-/* Deliberately not a bubble: a compact indented block reads better in a
-   narrow panel and keeps long results scannable. */
-.message__body {
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--border);
+.pagechip--warn {
+  color: var(--warning);
+  border-color: var(--warning-border);
+  background: var(--warning-subtle);
+}
+
+/* --- conversation ------------------------------------------------------ */
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-3) var(--space-5);
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   font-size: var(--text-base);
+}
+
+/* The user's turn is a compact right-aligned bubble; SurfAI's is plain text
+   at full width, so long answers stay readable in a narrow panel. */
+.msg--user {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 7px 11px;
+  border-radius: var(--radius-lg) var(--radius-lg) 2px var(--radius-lg);
+  background: var(--accent);
+  color: var(--fg-inverted);
+}
+
+.msg--assistant {
+  align-self: stretch;
+}
+
+.msg__text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  line-height: 1.6;
 }
 
-.message--user .message__body {
-  border-left-color: var(--accent);
-  color: var(--fg);
-}
-
-.message--error .message__body {
-  border-left-color: var(--danger);
+.msg--error .msg__text {
   color: var(--danger);
 }
 
-.message__warning {
+.msg__error-icon {
+  vertical-align: -2px;
+  margin-right: 5px;
+}
+
+.msg__pending {
   display: flex;
-  gap: 6px;
-  margin-top: var(--space-2);
+  align-items: center;
+  gap: 7px;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.msg__notice {
+  display: flex;
+  gap: 7px;
   padding: var(--space-2);
   border: 1px solid var(--warning-border);
   border-radius: var(--radius);
@@ -385,9 +352,111 @@ a:focus:not(:focus-visible) {
   font-size: var(--text-sm);
 }
 
-.message__warning svg {
+.msg__notice svg {
   flex-shrink: 0;
-  margin-top: 1px;
+  margin-top: 2px;
+}
+
+/* --- folded steps ------------------------------------------------------ */
+
+.steps {
+  margin-top: 2px;
+}
+
+.steps__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px 2px 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-subtle);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.steps__toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+}
+
+.steps__chev {
+  transition: transform 0.12s ease;
+}
+
+.steps__chev--open {
+  transform: rotate(90deg);
+}
+
+.steps__list {
+  margin: var(--space-1) 0 0;
+  padding: 0 0 0 var(--space-3);
+  list-style: none;
+  border-left: 1px solid var(--border);
+}
+
+.steps__item {
+  padding: 2px 0;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+
+.steps__item--failed {
+  color: var(--danger);
+}
+
+/* --- empty state and suggestions --------------------------------------- */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+  padding: var(--space-5) var(--space-4);
+}
+
+.welcome__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.welcome__sub {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.welcome__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.suggestion:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
 }
 
 /* --- composer ----------------------------------------------------------- */
@@ -435,78 +504,6 @@ a:focus:not(:focus-visible) {
   margin-top: 6px;
   font-size: var(--text-xs);
   color: var(--fg-subtle);
-}
-
-/* --- agent activity ----------------------------------------------------- */
-
-.activity {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.activity__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 3px 0;
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-}
-
-.activity__row--running {
-  color: var(--fg);
-  font-weight: 500;
-}
-
-.activity__row--failed {
-  color: var(--danger);
-}
-
-.activity__row--done {
-  color: var(--fg-muted);
-}
-
-.activity__icon {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.activity__step {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--fg-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-.spinner {
-  animation: surfai-spin 1s linear infinite;
-}
-
-@keyframes surfai-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.running-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius);
-  background: var(--accent-subtle);
-  font-size: var(--text-sm);
-}
-
-.running-bar__label {
-  flex: 1;
-  font-weight: 500;
-  color: var(--fg);
 }
 
 /* --- favourites --------------------------------------------------------- */
@@ -867,11 +864,6 @@ a:focus:not(:focus-visible) {
   color: var(--warning);
 }
 
-.banner--info {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-}
 
 .banner svg {
   flex-shrink: 0;

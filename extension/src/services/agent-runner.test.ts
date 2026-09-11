@@ -341,4 +341,62 @@ describe('AgentRunner', () => {
     await new AgentRunner(callbacks()).send('check my AI jobs');
     expect(messagingMock.openUrl).toHaveBeenCalledWith('https://jobs.example.com/search');
   });
+  // --- direct answers ----------------------------------------------------
+
+  it('reports no steps when the backend answers directly', async () => {
+    // A question the backend answers itself: no action, no loop, no steps.
+    apiMock.chat.mockResolvedValue(
+      directive({
+        type: 'answer',
+        state: 'COMPLETED',
+        message: 'Recursion is when a function calls itself.',
+        task_id: '',
+        max_steps: 0,
+      }),
+    );
+
+    const handlers = callbacks();
+    await new AgentRunner(handlers).send('explain recursion');
+
+    expect(messagingMock.executeAction).not.toHaveBeenCalled();
+    expect(apiMock.continueTask).not.toHaveBeenCalled();
+    // Nothing was appended to the activity trace, so the reply renders as
+    // plain chat rather than as a task with an empty step list.
+    expect(handlers.onActivity).not.toHaveBeenCalled();
+    expect(handlers.onFinished).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Recursion is when a function calls itself.' }),
+    );
+  });
+
+  it('forwards conversation history to the backend', async () => {
+    apiMock.chat.mockResolvedValue(
+      directive({ type: 'answer', state: 'COMPLETED', message: 'Four.' }),
+    );
+
+    await new AgentRunner(callbacks()).send('and two plus two?', [
+      { role: 'user', content: 'what is one plus one' },
+      { role: 'assistant', content: 'Two.' },
+    ]);
+
+    expect(apiMock.chat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: [
+          { role: 'user', content: 'what is one plus one' },
+          { role: 'assistant', content: 'Two.' },
+        ],
+      }),
+    );
+  });
+
+  it('still records steps when the loop actually runs', async () => {
+    apiMock.chat.mockResolvedValue(directive({ action: { action: 'CLICK', target: 'e2' } }));
+    apiMock.continueTask.mockResolvedValue(
+      directive({ type: 'answer', state: 'COMPLETED', message: 'Done.' }),
+    );
+
+    const handlers = callbacks();
+    await new AgentRunner(handlers).send('search for something');
+
+    expect(handlers.onActivity).toHaveBeenCalled();
+  });
 });

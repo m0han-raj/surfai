@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Compass, MessageSquare, Bookmark, History, Settings, Trash2 } from 'lucide-react';
+import { MessageSquare, Bookmark, History, Settings, PenSquare } from 'lucide-react';
 import type { Favourite, FavouriteDraft } from '../types/favourites';
 import { api, ApiError } from '../services/api';
 import { getSettings, onSettingsChanged } from '../services/storage';
@@ -12,18 +12,19 @@ import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
 import InputBox from './components/InputBox';
 import ConfirmationDialog from './components/ConfirmationDialog';
+import PageChip from './components/PageChip';
 
-type View = 'home' | 'favourites' | 'history' | 'settings';
+type View = 'chat' | 'favourites' | 'history' | 'settings';
 
-const TABS: Array<{ id: View; label: string; Icon: typeof Compass }> = [
-  { id: 'home', label: 'Chat', Icon: MessageSquare },
-  { id: 'favourites', label: 'Favourites', Icon: Bookmark },
+const TABS: Array<{ id: View; label: string; Icon: typeof MessageSquare }> = [
+  { id: 'chat', label: 'Chat', Icon: MessageSquare },
+  { id: 'favourites', label: 'Saved', Icon: Bookmark },
   { id: 'history', label: 'History', Icon: History },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ];
 
 export default function App() {
-  const [view, setView] = useState<View>('home');
+  const [view, setView] = useState<View>('chat');
   const [favourites, setFavourites] = useState<Favourite[]>([]);
   const [favouritesLoading, setFavouritesLoading] = useState(true);
   const [favouritesError, setFavouritesError] = useState<string | null>(null);
@@ -31,7 +32,6 @@ export default function App() {
   const agent = useAgent();
   const page = usePageContext();
 
-  // --- theme ------------------------------------------------------------
   useEffect(() => {
     function apply(theme: string) {
       document.documentElement.setAttribute('data-theme', theme);
@@ -40,7 +40,6 @@ export default function App() {
     return onSettingsChanged((settings) => apply(settings.theme));
   }, []);
 
-  // --- favourites -------------------------------------------------------
   const loadFavourites = useCallback(async () => {
     setFavouritesLoading(true);
     setFavouritesError(null);
@@ -49,10 +48,10 @@ export default function App() {
     } catch (error) {
       setFavouritesError(
         error instanceof ApiError && error.isNetwork
-          ? 'Backend not reachable. Favourites are stored on the server.'
+          ? 'Backend not reachable. Saved pages are stored on the server.'
           : error instanceof Error
             ? error.message
-            : 'Could not load favourites.',
+            : 'Could not load saved pages.',
       );
     } finally {
       setFavouritesLoading(false);
@@ -63,7 +62,7 @@ export default function App() {
     void loadFavourites();
   }, [loadFavourites]);
 
-  // A task may have created a favourite; refresh once it settles.
+  // A reply may have saved a page; refresh once the turn settles.
   useEffect(() => {
     if (!agent.running && agent.state === 'COMPLETED') {
       void loadFavourites();
@@ -72,7 +71,7 @@ export default function App() {
 
   const handleSend = useCallback(
     async (message: string) => {
-      setView('home');
+      setView('chat');
       await agent.send(message);
       void page.refresh();
     },
@@ -81,7 +80,7 @@ export default function App() {
 
   const handleRunFavourite = useCallback(
     async (favourite: Favourite) => {
-      setView('home');
+      setView('chat');
       await agent.runFavourite(favourite.id, `Open my ${favourite.name} and continue`);
       void page.refresh();
     },
@@ -115,8 +114,7 @@ export default function App() {
   const handleDeleteFavourite = useCallback(
     async (favourite: Favourite) => {
       // eslint-disable-next-line no-alert
-      const confirmed = window.confirm(`Delete the favourite "${favourite.name}"?`);
-      if (!confirmed) return;
+      if (!window.confirm(`Delete "${favourite.name}"?`)) return;
       await api.deleteFavourite(favourite.id);
       await loadFavourites();
     },
@@ -128,61 +126,30 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <div className="app__brand">
-          <span className="app__brand-mark" aria-hidden="true">
-            <Compass size={14} />
-          </span>
-          SurfAI
-        </div>
+        <span className="app__brand">SurfAI</span>
 
-        <div className="app__header-actions">
-          {view === 'home' && agent.messages.length > 0 && !agent.running && (
+        <div className="app__header-right">
+          {view === 'chat' && <PageChip insight={page.insight} loading={page.loading} error={page.error} />}
+          {view === 'chat' && agent.messages.length > 0 && !agent.running && (
             <button
               type="button"
               className="button button--icon"
               onClick={agent.clear}
-              aria-label="Clear conversation"
-              title="Clear conversation"
+              aria-label="Start a new conversation"
+              title="New conversation"
             >
-              <Trash2 size={14} aria-hidden="true" />
+              <PenSquare size={14} aria-hidden="true" />
             </button>
           )}
         </div>
       </header>
 
-      <nav className="app__nav" aria-label="Sections">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            className="tab"
-            aria-current={view === id ? 'page' : undefined}
-            onClick={() => setView(id)}
-          >
-            <Icon size={13} aria-hidden="true" />
-            {label}
-          </button>
-        ))}
-      </nav>
-
       <main className="app__main">
-        {view === 'home' && (
+        {view === 'chat' && (
           <Home
             messages={agent.messages}
-            activity={agent.activity}
-            state={agent.state}
-            step={agent.step}
-            maxSteps={agent.maxSteps}
-            running={agent.running}
             insight={page.insight}
-            pageLoading={page.loading}
-            pageError={page.error}
-            favourites={favourites}
-            favouritesLoading={favouritesLoading}
-            onRefreshPage={page.refresh}
-            onRunFavourite={handleRunFavourite}
-            onViewFavourites={() => setView('favourites')}
-            onStop={agent.stop}
+            onPickSuggestion={handleSend}
           />
         )}
 
@@ -205,9 +172,24 @@ export default function App() {
         {view === 'settings' && <SettingsPage />}
       </main>
 
-      {view === 'home' && (
+      {view === 'chat' && (
         <InputBox onSubmit={handleSend} onStop={agent.stop} running={agent.running} />
       )}
+
+      <nav className="app__nav" aria-label="Sections">
+        {TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className="tab"
+            aria-current={view === id ? 'page' : undefined}
+            onClick={() => setView(id)}
+          >
+            <Icon size={15} aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
 
       {agent.pendingConfirmation && (
         <ConfirmationDialog

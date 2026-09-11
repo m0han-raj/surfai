@@ -213,7 +213,7 @@ class MemoryAgent:
         *,
         conversation: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
-        """Turn "save this as my laptop search" into a structured favourite."""
+        """Turn "save this as my research reading" into a structured favourite."""
         url = page.get("url", "")
         domain = _domain_of(url)
         fallback = {
@@ -248,9 +248,9 @@ class MemoryAgent:
                     + "\nCreate a favourite. `name` is a short label the user would "
                     "recognise and could say out loud later. `intent` states what they "
                     "want to achieve when they return. `preferences` captures concrete "
-                    "constraints they mentioned (location, budget, experience, brands, "
-                    "skills) as key/value pairs -- leave it empty if they stated none. "
-                    "Do not invent preferences."
+                    "constraints they mentioned (topic, location, timeframe, sources, "
+                    "or anything else specific) as key/value pairs -- leave it empty "
+                    "if they stated none. Do not invent preferences."
                 ),
             ),
         ]
@@ -298,7 +298,7 @@ def _domain_of(url: str) -> str:
 
 
 def _fallback_name(user_message: str, page: dict[str, Any]) -> str:
-    """Pull a name out of phrasing like 'save this as my laptop search'."""
+    """Pull a name out of phrasing like 'save this as my research reading'."""
     match = re.search(
         r"\bas\s+(?:my\s+|the\s+)?[\"']?([^\"'.,\n]{2,50})[\"']?", user_message, re.IGNORECASE
     )

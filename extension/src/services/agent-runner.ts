@@ -28,6 +28,12 @@ import {
 } from './messaging';
 import type { TabContext } from '../types/messages';
 
+/** A prior turn, sent so a direct answer has conversational context. */
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface RunnerCallbacks {
   onDirective: (directive: Directive) => void;
   onActivity: (label: string, status: 'running' | 'done' | 'failed' | 'info') => void;
@@ -96,8 +102,13 @@ export class AgentRunner {
     this.running = false;
   }
 
-  /** Send a user message and run the loop to completion. */
-  async send(message: string): Promise<void> {
+  /**
+   * Send a user message.
+   *
+   * Most messages are answered directly by the backend and the loop never
+   * starts; `handle` recognises that from the directive it gets back.
+   */
+  async send(message: string, history: ChatTurn[] = []): Promise<void> {
     if (this.running) {
       this.callbacks.onError('A task is already running. Stop it before starting another.');
       return;
@@ -108,11 +119,15 @@ export class AgentRunner {
     this.taskId = null;
 
     try {
-      this.callbacks.onActivity('Analyzing request', 'running');
       const { page, tab, warning } = await observe(this.options.maxElements);
       if (warning) this.callbacks.onActivity(warning, 'info');
 
-      const directive = await api.chat({ message, page_context: page, tab_context: tab });
+      const directive = await api.chat({
+        message,
+        page_context: page,
+        tab_context: tab,
+        history,
+      });
       await this.handle(directive);
     } catch (error) {
       this.fail(error);
@@ -172,10 +187,9 @@ export class AgentRunner {
 
     while (!this.cancelled) {
       if (directive.type === 'answer' || directive.type === 'error') {
-        this.callbacks.onActivity(
-          directive.type === 'answer' ? 'Task completed' : 'Task failed',
-          directive.type === 'answer' ? 'done' : 'failed',
-        );
+        // No closing activity line. A directly answered question never ran a
+        // step, and emitting one here would give it a steps affordance that
+        // expands to nothing.
         this.callbacks.onFinished(directive);
         return;
       }

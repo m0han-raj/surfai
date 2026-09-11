@@ -35,12 +35,23 @@ export interface ActivityEntry {
   at: number;
 }
 
+/** One step SurfAI took, shown folded under the reply that used it. */
+export interface MessageStep {
+  id: string;
+  label: string;
+  status: 'running' | 'done' | 'failed' | 'info';
+}
+
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant';
   content: string;
   at: number;
   /** Non-fatal notices, such as a prompt-injection warning. */
   warnings?: string[];
   error?: boolean;
+  /** Present only when SurfAI acted on the page to produce this reply. */
+  steps?: MessageStep[];
+  /** The reply is still being produced; renders as a live status line. */
+  pending?: boolean;
 }

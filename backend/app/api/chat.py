@@ -1,9 +1,14 @@
 """Chat entry point.
 
 `/api/chat` is the single door the side panel knocks on. It classifies intent
-and routes: favourite management is answered directly, while a browsing request
-starts a task and returns the first directive. From then on the extension drives
-the loop through `/api/tasks/{id}/continue`.
+and routes to one of three places:
+
+* a **direct answer** (`question`, `chitchat`) -- one model call, no page loop.
+  This is the common case, and the reason SurfAI reads as an assistant.
+* **favourite management** -- answered here from the database.
+* a **browsing task** (`browse_task`, or a favourite that implies one) -- starts
+  the agent loop and returns the first directive. From then on the extension
+  drives it through `/api/tasks/{id}/continue`.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.agents.assistant import Assistant
 from app.agents.memory_agent import MemoryAgent
 from app.agents.orchestrator import COMPLETED, FAILED, Orchestrator
 from app.api.deps import get_orchestrator
@@ -50,6 +56,29 @@ async def chat(
         return _error(
             "I could not reach the language model. Check that your LLM runtime is running "
             f"and that LLM_BASE_URL points at it. ({exc})"
+        )
+
+    # -- answer directly ---------------------------------------------------
+    # The common case. No page loop, no planner, no task record: SurfAI is an
+    # assistant first, and only becomes an agent when asked to act.
+    if intent.intent in ("question", "chitchat"):
+        try:
+            reply = await Assistant(get_provider()).answer(
+                payload.message,
+                page=page,
+                history=[turn.model_dump() for turn in payload.history],
+            )
+        except LLMUnavailableError as exc:
+            return _error(f"I could not reach the language model. ({exc})")
+        except LLMError as exc:
+            logger.info("Direct answer failed: %s", exc)
+            return _error("I could not produce an answer. Please try again.")
+
+        return _answer(
+            reply.message,
+            intent=intent.intent,
+            warnings=reply.warnings,
+            used_page=reply.used_page,
         )
 
     # -- list favourites ---------------------------------------------------
@@ -139,11 +168,11 @@ async def chat(
 
 
 def _answer(message: str, **extra) -> dict:
-    return {
+    payload = {
         "type": "answer",
         "task_id": "",
         "state": COMPLETED,
-        "activity": "Task completed",
+        "activity": "Answered",
         "step": 0,
         "max_steps": 0,
         "action": None,
@@ -151,8 +180,9 @@ def _answer(message: str, **extra) -> dict:
         "message": message,
         "data": None,
         "warnings": [],
-        **extra,
     }
+    payload.update(extra)
+    return payload
 
 
 def _error(message: str) -> dict:
