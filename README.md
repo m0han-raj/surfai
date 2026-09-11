@@ -179,32 +179,44 @@ consent screen for nothing.
 
 ### 2. Deploy to Vercel
 
+Import the repository at [vercel.com/new](https://vercel.com/new). `vercel.json`
+is committed, so the build needs no configuration: it routes every request to
+the FastAPI app and installs from the root `requirements.txt`. Every push to
+`main` then deploys, and every pull request gets a preview.
+
+Set these in **Project Settings, Environment Variables**:
+
+| Variable | Value |
+|---|---|
+| `AUTH_PROVIDER` | `google` |
+| `GOOGLE_CLIENT_ID` | your OAuth client id |
+| `DATABASE_URL` | a **pooled** PostgreSQL URL (Neon, Supabase or Vercel Postgres) |
+| `LLM_BASE_URL` | a reachable OpenAI-compatible endpoint |
+| `LLM_API_KEY` | if that endpoint needs one |
+| `ALLOWED_EMAILS` | optional, to keep the instance private |
+
+Then run the migrations once, from anywhere, against the same database:
+
 ```bash
-vercel link
-vercel env add AUTH_PROVIDER production        # google
-vercel env add GOOGLE_CLIENT_ID production
-vercel env add DATABASE_URL production         # Neon, Supabase or Vercel Postgres
-vercel env add LLM_BASE_URL production
-vercel env add LLM_API_KEY production
-vercel deploy --prod
+cd backend && DATABASE_URL="your-production-url" alembic upgrade head
 ```
 
-`vercel.json` routes everything to the FastAPI app. Two things differ from the
-Docker path, and both are handled in code rather than left as footguns:
+Three things differ from the container path. All are handled in code, but they
+explain the shape of the configuration:
 
-- **Connection pooling.** A per-process pool is fine on a long-lived server and
-  ruinous across dozens of concurrent lambdas. The engine uses `NullPool` when
-  it detects Vercel, so use a pooled connection string (Neon and Supabase both
-  offer one) as well.
-- **Migrations.** Nothing runs them for you, and cold-start DDL would race. Run
-  them once against the same database, from anywhere:
+- **Connection pooling.** A per-process pool is correct on a long-lived server
+  and ruinous across concurrent lambdas, each holding its own. The engine uses
+  `NullPool` when it detects Vercel, which is why the connection string should
+  be a pooled one.
+- **No implicit schema creation.** Cold-start DDL would race between lambdas, so
+  it is skipped and migrations are the deliberate step above.
+- **The dependency list is smaller.** The root `requirements.txt` omits Uvicorn
+  (Vercel invokes the ASGI app directly) and Alembic (migrations are separate).
+  Both are megabytes against a hard lambda size limit. A test fails if the two
+  lists drift apart on a shared pin.
 
-  ```bash
-  cd backend && DATABASE_URL="your-production-url" alembic upgrade head
-  ```
-
-**`maxDuration` is 60s.** A single agent step has to finish inside it, which is
-fine for a hosted model and not for a slow local one.
+**`maxDuration` is 60s.** One agent step has to finish inside it, which is fine
+for a hosted model and not for a slow local one.
 
 ### 3. Verify before trusting it
 

@@ -22,21 +22,61 @@ def _pinned(path: Path) -> list[str]:
     ]
 
 
-def test_root_and_backend_requirements_agree() -> None:
+def _by_name(lines: list[str]) -> dict[str, str]:
+    """Map distribution name to its pinned version, ignoring extras."""
+    pins = {}
+    for line in lines:
+        spec, _, version = line.partition("==")
+        pins[spec.split("[")[0].strip().lower()] = version.strip()
+    return pins
+
+
+def test_the_vercel_requirements_are_a_subset_of_the_backend_ones() -> None:
     """Vercel installs from the root list; Docker installs from the backend one.
 
-    They are separate files because Vercel's parser rejects `-r` includes, so
-    nothing but this test stops them drifting into different dependency sets on
-    the two deployment paths.
-    """
-    root = _pinned(ROOT / "requirements.txt")
-    backend = _pinned(ROOT / "backend" / "requirements.txt")
+    The root list is deliberately smaller: Vercel invokes the ASGI app directly
+    so no server is needed, and migrations are a separate step so Alembic is
+    not needed at request time. Both are megabytes against a hard lambda size
+    limit.
 
-    assert root == backend, (
-        "requirements.txt and backend/requirements.txt have diverged. "
-        "Update both, or the Vercel deployment installs different versions "
-        "than the container."
+    What must never happen is a package appearing in both at different
+    versions, or the root list acquiring something the backend does not have.
+    """
+    root = _by_name(_pinned(ROOT / "requirements.txt"))
+    backend = _by_name(_pinned(ROOT / "backend" / "requirements.txt"))
+
+    extra = set(root) - set(backend)
+    assert not extra, (
+        f"requirements.txt has packages the backend list does not: {sorted(extra)}. "
+        "The deployment would install something never tested against."
     )
+
+    mismatched = {
+        name: (root[name], backend[name])
+        for name in root
+        if root[name] != backend[name]
+    }
+    assert not mismatched, (
+        f"Pinned versions have drifted between the two lists: {mismatched}. "
+        "The Vercel deployment would run different code than the container."
+    )
+
+
+def test_the_vercel_requirements_cover_what_the_app_imports() -> None:
+    """Trimming the deployment list must not remove something loaded at import."""
+    root = _by_name(_pinned(ROOT / "requirements.txt"))
+
+    # Imported transitively by app.main; without any of these the lambda 500s
+    # on its first request rather than failing at build time.
+    for package in ("fastapi", "pydantic", "pydantic-settings", "sqlalchemy", "httpx"):
+        assert package in root, f"{package} is required at runtime but not in requirements.txt"
+
+    # Present in the backend list for the container, deliberately absent here.
+    for package in ("uvicorn", "alembic"):
+        assert package not in root, (
+            f"{package} is not needed on Vercel and costs lambda size; "
+            "remove it or update this test with the reason it is back"
+        )
 
 
 def test_every_requirement_is_pinned() -> None:
