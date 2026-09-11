@@ -87,19 +87,50 @@ def test_every_requirement_is_pinned() -> None:
             assert "==" in line, f"{path.name}: {line!r} is not pinned to a version"
 
 
-def test_vercel_routes_everything_to_the_app() -> None:
-    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+def _vercel() -> dict:
+    return json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
 
+
+def test_vercel_routes_the_catch_all_to_the_app() -> None:
+    config = _vercel()
     entrypoint = config["builds"][0]["src"]
     assert (ROOT / entrypoint).is_file(), f"vercel.json builds {entrypoint}, which is missing"
 
-    # The app is a single ASGI entrypoint; anything not routed to it 404s in a
-    # way that looks like a code bug rather than a config one.
-    assert config["routes"] == [{"src": "/(.*)", "dest": entrypoint}]
+    # Order matters: the catch-all must come last, or it swallows every other
+    # route and the static pages 404 through the Python app.
+    assert config["routes"][-1] == {"src": "/(.*)", "dest": entrypoint}
 
     # `functions` and `builds` together are rejected at deploy time, which is a
     # slow way to find out.
     assert "functions" not in config
+
+
+def test_the_demo_pages_are_served_statically() -> None:
+    """Routing them through the lambda would spend an invocation on a file."""
+    config = _vercel()
+    assert any(b.get("use") == "@vercel/static" for b in config["builds"])
+    assert {"src": "/demo/(.*)", "dest": "/demo/$1"} in config["routes"]
+    assert (ROOT / "demo" / "index.html").is_file()
+
+
+def test_the_landing_page_is_shipped_with_the_lambda() -> None:
+    """The Python builder traces imports, not data files.
+
+    Without an explicit includeFiles the page is simply absent at runtime, and
+    the only symptom is the fallback JSON that this page exists to replace.
+    """
+    config = _vercel()
+    include = config["builds"][0]["config"].get("includeFiles", "")
+    assert "static" in include, "the landing page would not be deployed"
+
+    page = ROOT / "backend" / "app" / "static" / "index.html"
+    assert page.is_file()
+
+    html = page.read_text(encoding="utf-8")
+    # It is the public face of the project; these are the things it must carry.
+    assert "<title>SurfAI</title>" in html
+    assert "/health" in html
+    assert "github.com/m0han-raj/surfai" in html
 
 
 def test_vercel_allows_a_full_agent_step() -> None:

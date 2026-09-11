@@ -7,11 +7,20 @@
       "config": {
         "runtime": "python3.12",
         "maxLambdaSize": "50mb",
-        "maxDuration": 60
+        "maxDuration": 60,
+        "includeFiles": "backend/app/static/**"
       }
+    },
+    {
+      "src": "demo/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/demo/(.*)",
+      "dest": "/demo/$1"
+    },
     {
       "src": "/(.*)",
       "dest": "backend/vercel_entry.py"

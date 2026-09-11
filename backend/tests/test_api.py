@@ -37,8 +37,27 @@ def test_llm_health_never_leaks_the_api_key(client) -> None:
     assert "llm_api_key" not in str(body).lower()
 
 
-def test_root_endpoint(client) -> None:
-    assert client.get("/").json()["name"] == "SurfAI"
+def test_root_serves_the_landing_page(client) -> None:
+    """A deployed instance's front door, not a JSON blob."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<title>SurfAI</title>" in response.text
+    # It has to say plainly that the UI is an extension, since that is the
+    # question anyone reaching this URL in a browser actually has.
+    assert "Chrome" in response.text
+
+
+def test_root_falls_back_to_json_when_the_page_is_missing(client, monkeypatch) -> None:
+    """A packaging mistake should degrade, not 500."""
+    from app import main
+
+    monkeypatch.setattr(main, "_LANDING_PAGE", main.Path("does-not-exist.html"))
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "SurfAI"
 
 
 # --- favourites CRUD (AC-09, AC-10) --------------------------------------

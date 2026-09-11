@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.api import chat, favourites, health, observe, tasks
 from app.config import settings
@@ -163,11 +164,29 @@ app.include_router(favourites.router)
 app.include_router(observe.router)
 
 
+_LANDING_PAGE = Path(__file__).resolve().parent / "static" / "index.html"
+
+
 @app.get("/", include_in_schema=False)
-async def root() -> dict:
-    return {
-        "name": settings.app_name,
-        "version": "0.1.0",
-        "docs": "/docs",
-        "health": "/health",
-    }
+async def root() -> Response:
+    """The public face of a deployed instance.
+
+    A bare JSON blob is a poor front door: the only people who reach this URL in
+    a browser are looking for what SurfAI is and how to install it, and the
+    interface itself is a Chrome extension rather than anything servable here.
+
+    Falls back to the JSON descriptor if the file is missing, so a packaging
+    mistake degrades rather than 500s.
+    """
+    try:
+        return HTMLResponse(_LANDING_PAGE.read_text(encoding="utf-8"))
+    except OSError:
+        logger.warning("Landing page missing at %s; serving the JSON descriptor", _LANDING_PAGE)
+        return JSONResponse(
+            {
+                "name": settings.app_name,
+                "version": "0.1.0",
+                "docs": "/docs",
+                "health": "/health",
+            }
+        )
