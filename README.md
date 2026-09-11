@@ -700,7 +700,7 @@ Verified on Windows 11, Docker 29.1.3, Node 22.9.0, Python 3.12.10, Chrome 116+.
 | AC-21 | Authentication | PASS | No hard-coded secrets; local mode needs no login; key stays server-side |
 | AC-22 | UI | PASS | No emojis; Inter; Lucide icons; keyboard navigation; focus rings; loading/error states |
 | AC-23 | README | PASS | This document, following the verified setup |
-| AC-24 | GitHub | See the final status note in this README's history section |
+| AC-24 | GitHub | PASS | Published to [github.com/m0han-raj/surfai](https://github.com/m0han-raj/surfai) (private); 132 files, no secrets or build output |
 
 ---
 

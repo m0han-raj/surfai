@@ -1,0 +1,110 @@
+name: CI
+
+# Both suites run without PostgreSQL and without a language model: the backend
+# tests use SQLite and a scripted fake provider, the extension tests use jsdom.
+# CI therefore needs no services and no secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (tests + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: backend
+        run: ruff check app tests migrations tools
+
+      - name: Tests
+        working-directory: backend
+        run: pytest -q
+
+      - name: Migrations apply and reverse cleanly
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./ci-check.db
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+
+  extension:
+    name: Extension (tests + typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: extension
+        run: npm run typecheck
+
+      - name: Tests
+        working-directory: extension
+        run: npm test
+
+      - name: Build
+        working-directory: extension
+        run: npm run build:only
+
+      - name: Verify the built extension package
+        working-directory: extension
+        run: |
+          node -e "
+          const fs = require('fs'), path = require('path');
+          const m = JSON.parse(fs.readFileSync('dist/manifest.json', 'utf8'));
+          const checks = [
+            ['manifest_version is 3', m.manifest_version === 3],
+            ['service worker exists', fs.existsSync(path.join('dist', m.background.service_worker))],
+            ['side panel exists', fs.existsSync(path.join('dist', m.side_panel.default_path))],
+            ['content script exists', fs.existsSync('dist/content.js')],
+            ['does not request <all_urls>', !JSON.stringify(m.host_permissions || []).includes('all_urls')],
+          ];
+          let failed = 0;
+          for (const [label, ok] of checks) {
+            console.log((ok ? 'PASS  ' : 'FAIL  ') + label);
+            if (!ok) failed++;
+          }
+          process.exit(failed ? 1 : 0);
+          "
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the backend image
+        run: docker build -t surfai-backend:ci ./backend
