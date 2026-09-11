@@ -43,26 +43,40 @@ function hasIdentity(): boolean {
   return typeof chrome !== 'undefined' && Boolean(chrome.identity?.getAuthToken);
 }
 
-/**
- * Get a token, prompting the user only when `interactive` is set.
- *
- * Callers pass `interactive: false` on the hot path so a request never pops a
- * sign-in window unexpectedly, and `true` only from an explicit Sign in action.
- */
-export function getToken(interactive = false): Promise<string | null> {
-  if (!isAuthConfigured() || !hasIdentity()) return Promise.resolve(null);
+/** Ask Chrome for a token, keeping whatever it says when it will not give one. */
+function requestToken(interactive: boolean): Promise<{ token: string | null; error: string | null }> {
+  if (!isAuthConfigured() || !hasIdentity()) {
+    return Promise.resolve({ token: null, error: null });
+  }
 
   return new Promise((resolve) => {
     chrome.identity.getAuthToken({ interactive }, (token) => {
       // Reading lastError is required; leaving it unread logs a warning.
       const error = chrome.runtime.lastError;
       if (error || !token) {
-        resolve(null);
+        // Chrome's message is worth keeping. A client id registered as a Web
+        // application rather than a Chrome Extension fails here with a
+        // specific complaint, and hiding it behind "sign-in failed" leaves
+        // nothing to act on.
+        resolve({ token: null, error: error?.message ?? null });
         return;
       }
-      resolve(typeof token === 'string' ? token : (token as { token: string }).token);
+      resolve({
+        token: typeof token === 'string' ? token : (token as { token: string }).token,
+        error: null,
+      });
     });
   });
+}
+
+/**
+ * Get a token, prompting the user only when `interactive` is set.
+ *
+ * Callers pass `interactive: false` on the hot path so a request never pops a
+ * sign-in window unexpectedly, and `true` only from an explicit Sign in action.
+ */
+export async function getToken(interactive = false): Promise<string | null> {
+  return (await requestToken(interactive)).token;
 }
 
 /**
@@ -93,11 +107,20 @@ export async function signIn(): Promise<string> {
       false,
     );
   }
-  const token = await getToken(true);
+  const { token, error } = await requestToken(true);
   if (!token) {
-    throw new AuthError('Sign-in was cancelled or failed. Try again.');
+    throw new AuthError(
+      error
+        ? `Google refused the sign-in: ${error}`
+        : 'Sign-in was cancelled or failed. Try again.',
+    );
   }
   return token;
+}
+
+/** Is there a usable token right now, without prompting? */
+export async function isSignedIn(): Promise<boolean> {
+  return Boolean(await getToken(false));
 }
 
 /** Sign out and forget the cached token. */

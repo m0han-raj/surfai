@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, X, RotateCcw, Save } from 'lucide-react';
 import {
   DEFAULT_SETTINGS,
@@ -8,6 +8,13 @@ import {
   type SurfAISettings,
 } from '../../services/storage';
 import { api, type HealthResponse, type LlmHealthResponse } from '../../services/api';
+import {
+  getAccountEmail,
+  isAuthConfigured,
+  isSignedIn,
+  signIn,
+  signOut,
+} from '../../services/auth';
 
 /**
  * Settings and diagnostics.
@@ -26,6 +33,12 @@ export default function SettingsPage() {
   const [llm, setLlm] = useState<LlmHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [account, setAccount] = useState<{ signedIn: boolean; email: string | null }>({
+    signedIn: false,
+    email: null,
+  });
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
     void getSettings().then(setSettings);
@@ -52,6 +65,37 @@ export default function SettingsPage() {
     void checkConnections();
     // Re-check whenever the backend address changes.
   }, [settings.backendUrl]);
+
+  const refreshAccount = useCallback(async () => {
+    if (!isAuthConfigured()) return;
+    setAccount({ signedIn: await isSignedIn(), email: await getAccountEmail() });
+  }, []);
+
+  useEffect(() => {
+    void refreshAccount();
+  }, [refreshAccount]);
+
+  async function handleSignIn() {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      await signIn();
+      await refreshAccount();
+      await checkConnections();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Sign-in failed.');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setAuthBusy(true);
+    setAuthError(null);
+    await signOut();
+    await refreshAccount();
+    setAuthBusy(false);
+  }
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
@@ -238,6 +282,61 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
+
+      {/*
+        Only shown when this build has an OAuth client. A local backend runs
+        unauthenticated, and offering a sign-in there would be noise.
+      */}
+      {isAuthConfigured() && (
+        <>
+          <h2 className="section__header section__header--static">
+            <span>Account</span>
+          </h2>
+          <div className="section__body stack">
+            <p className="text-sm text-muted">
+              A hosted backend keeps each person's saved pages and history separate, so it
+              needs you to sign in. A local backend does not.
+            </p>
+
+            {authError && (
+              <div className="banner banner--danger" role="alert" style={{ margin: 0 }}>
+                <X size={14} aria-hidden="true" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <StatusRow
+              label="Google"
+              ok={account.signedIn}
+              detail={
+                account.signedIn ? (account.email ?? 'Signed in') : 'Not signed in'
+              }
+            />
+
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              {account.signedIn ? (
+                <button
+                  type="button"
+                  className="button"
+                  onClick={handleSignOut}
+                  disabled={authBusy}
+                >
+                  Sign out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={handleSignIn}
+                  disabled={authBusy}
+                >
+                  {authBusy ? 'Signing in' : 'Sign in with Google'}
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <h2 className="section__header section__header--static">
         <span>Privacy</span>
