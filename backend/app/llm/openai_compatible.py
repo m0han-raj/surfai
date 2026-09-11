@@ -31,9 +31,35 @@ from app.llm.provider import (
     Message,
     StructuredOutputError,
 )
-from app.llm.schemas import JSONExtractionError, extract_json, validate_against_schema
+from app.llm.schemas import (
+    JSONExtractionError,
+    extract_json,
+    strip_optional_nulls,
+    to_strict_schema,
+    validate_against_schema,
+)
 
 logger = logging.getLogger(__name__)
+
+def _shape_instruction(schema: dict[str, Any]) -> str:
+    """Tell a non-strict endpoint what to produce.
+
+    `json_schema` needs none of this: the decoder enforces the shape. The other
+    two modes guarantee less and have to be asked. `json_object` promises only
+    that the bytes parse, so without the schema the model picks its own field
+    names -- live Groq answered a favourite-draft request with `title` and
+    `summary`, perfectly valid JSON and entirely the wrong object. `prompt`
+    mode promises nothing at all.
+
+    Saying "JSON" is also a hard precondition, not a stylistic choice: Groq and
+    OpenAI both reject `json_object` with "'messages' must contain the word
+    'json' in some form" otherwise, and none of our prompts say it.
+    """
+    return (
+        "Reply with a single JSON object matching this schema, and nothing else. "
+        "No prose, no code fences.\n"
+        f"{json.dumps(schema)}"
+    )
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -160,16 +186,31 @@ class OpenAICompatibleProvider(LLMProvider):
         last_raw = ""
         attempt_messages = list(messages)
 
+        # Strict mode accepts a much smaller dialect than we write in. A schema
+        # with no exact equivalent is declined rather than approximated, and
+        # simply skips this mode.
+        strict_schema = to_strict_schema(schema)
+        if strict_schema is None and "json_schema" in modes:
+            logger.debug("%s has no strict equivalent; skipping constrained decoding", schema_name)
+            modes = [mode for mode in modes if mode != "json_schema"]
+
         for attempt in range(max_retries + 1):
             for mode in modes:
-                payload = self._payload(attempt_messages, temperature, None)
+                messages_for_mode = attempt_messages
+                if mode != "json_schema":
+                    messages_for_mode = [
+                        *attempt_messages,
+                        Message(role="user", content=_shape_instruction(schema)),
+                    ]
+
+                payload = self._payload(messages_for_mode, temperature, None)
                 if mode == "json_schema":
                     payload["response_format"] = {
                         "type": "json_schema",
                         "json_schema": {
                             "name": schema_name,
                             "strict": True,
-                            "schema": schema,
+                            "schema": strict_schema,
                         },
                     }
                 elif mode == "json_object":
@@ -193,6 +234,11 @@ class OpenAICompatibleProvider(LLMProvider):
                 except JSONExtractionError as exc:
                     last_error = str(exc)
                     continue
+
+                # Strict mode makes the model name every property, so one it
+                # chose to omit arrives as an explicit null. Callers were
+                # written against the original schema and expect it absent.
+                parsed = strip_optional_nulls(parsed, schema)
 
                 errors = validate_against_schema(parsed, schema)
                 if not errors:

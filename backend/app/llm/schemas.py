@@ -100,6 +100,14 @@ _TYPE_MAP: dict[str, tuple[type, ...]] = {
 }
 
 
+def _allows_null(schema: dict[str, Any] | None) -> bool:
+    """Does this subschema permit null? An undeclared type permits anything."""
+    if not isinstance(schema, dict) or "type" not in schema:
+        return True
+    declared = schema["type"]
+    return "null" in (declared if isinstance(declared, list) else [declared])
+
+
 def _type_ok(value: Any, expected: str) -> bool:
     allowed = _TYPE_MAP.get(expected)
     if allowed is None:
@@ -135,6 +143,12 @@ def validate_against_schema(data: Any, schema: dict[str, Any], path: str = "$") 
         for key in schema.get("required", []):
             if key not in data:
                 errors.append(f"{path}: missing required property '{key}'")
+            elif data[key] is None and not _allows_null(properties.get(key)):
+                # Present but null. Strict structured output makes the model
+                # name every property, so this is now a shape a model can
+                # actually produce, and silently accepting it would hand the
+                # caller a None where the schema promised a value.
+                errors.append(f"{path}: required property '{key}' is null")
         if schema.get("additionalProperties") is False:
             for key in data:
                 if key not in properties:
@@ -160,3 +174,108 @@ def validate_against_schema(data: Any, schema: dict[str, Any], path: str = "$") 
             errors.append(f"{path}: above maximum {schema['maximum']}")
 
     return errors
+
+
+# --- strict structured output ---------------------------------------------
+#
+# Endpoints that enforce a schema by constrained decoding (Groq, OpenAI's
+# strict mode) accept a much smaller dialect than the one above. Meeting it is
+# worth some translation: the shape stops being a request to the model and
+# becomes a property of the decoder, which is one round trip instead of three
+# and one fewer thing a hostile page can talk the model out of.
+#
+# The original schema stays the gate. This only changes what goes on the wire.
+
+# Rejected outright by strict mode. Dropping them loses nothing, because
+# `validate_against_schema` still applies them to whatever comes back.
+_UNSUPPORTED_KEYWORDS = frozenset(
+    {"minLength", "maxLength", "minimum", "maximum", "exclusiveMinimum",
+     "exclusiveMaximum", "multipleOf", "pattern", "format", "default"}
+)
+
+
+class _Undeclarable(Exception):
+    """This schema has no exact strict equivalent."""
+
+
+def _strictify(node: Any, *, nullable: bool) -> Any:
+    if not isinstance(node, dict):
+        return node
+
+    out = {k: v for k, v in node.items() if k not in _UNSUPPORTED_KEYWORDS}
+    node_type = out.get("type")
+
+    if node_type == "object":
+        properties = out.get("properties")
+        if not properties:
+            # An open map. Strict mode can only describe closed objects, and
+            # inventing a shape for this one would constrain the model to
+            # fields nobody declared.
+            raise _Undeclarable("object without properties")
+
+        required = set(out.get("required", []))
+        out["properties"] = {
+            name: _strictify(sub, nullable=name not in required)
+            for name, sub in properties.items()
+        }
+        # Every property must be listed, so optionality moves into the type.
+        out["required"] = list(properties)
+        out["additionalProperties"] = False
+
+    elif node_type == "array" and "items" in out:
+        out["items"] = _strictify(out["items"], nullable=False)
+
+    if nullable and node_type is not None:
+        out["type"] = [node_type, "null"] if isinstance(node_type, str) else [*node_type, "null"]
+        if "enum" in out and None not in out["enum"]:
+            # Nullable and enumerated otherwise contradict: null fails the
+            # enum, and every enum member asserts a choice never made.
+            out["enum"] = [*out["enum"], None]
+
+    return out
+
+
+def to_strict_schema(schema: dict[str, Any]) -> dict[str, Any] | None:
+    """The strict-mode equivalent of `schema`, or None if there isn't one.
+
+    Never mutates the input: these schemas are module-level constants shared
+    by every request in the process, and corrupting one in place would break
+    every later call while the first looked fine.
+    """
+    try:
+        return _strictify(json.loads(json.dumps(schema)), nullable=False)
+    except _Undeclarable:
+        return None
+
+
+def strip_optional_nulls(data: Any, schema: dict[str, Any]) -> Any:
+    """Drop the nulls strict mode forced the model to write.
+
+    Strict mode requires every property to be mentioned, so one the model chose
+    to omit arrives as an explicit null. Callers were written against the
+    original schema and expect it absent, so this restores that shape and the
+    contract stays identical whichever mode produced the object.
+
+    A null in a *required* property is left alone: it is a schema violation,
+    and removing it would turn a clear validation error into a missing key.
+    """
+    if not isinstance(data, dict) or not isinstance(schema, dict):
+        return data
+
+    properties: dict[str, Any] = schema.get("properties", {})
+    required = set(schema.get("required", []))
+    cleaned: dict[str, Any] = {}
+
+    for key, value in data.items():
+        if value is None and key not in required:
+            continue
+        subschema = properties.get(key)
+        if isinstance(subschema, dict) and value is not None:
+            if subschema.get("type") == "object":
+                value = strip_optional_nulls(value, subschema)
+            elif subschema.get("type") == "array" and isinstance(value, list):
+                items = subschema.get("items", {})
+                value = [strip_optional_nulls(item, items) for item in value]
+        cleaned[key] = value
+
+    return cleaned
