@@ -8,8 +8,24 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _with_psycopg_driver(url: str) -> str:
+    """Point a bare PostgreSQL URL at psycopg 3.
+
+    `postgresql://` selects psycopg2 by default, which is not installed, and the
+    resulting ModuleNotFoundError names a package nobody asked for. Anything
+    already carrying a driver, and anything that is not PostgreSQL, is returned
+    untouched.
+    """
+    if not url:
+        return url
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
 
 
 class Settings(BaseSettings):
@@ -32,6 +48,14 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://surfai:surfai@localhost:5432/surfai",
         description="SQLAlchemy URL. Tests override this with SQLite.",
     )
+    # Managed providers inject the connection string under their own names and
+    # never with a driver prefix. Read as fallbacks so provisioning a database
+    # on Vercel, Neon or Supabase needs no manual copying. Ordered so a pooled
+    # URL wins: a serverless host opens a connection per invocation.
+    postgres_url: str = ""
+    postgres_prisma_url: str = ""
+    database_url_unpooled: str = ""
+    postgres_url_non_pooling: str = ""
     db_echo: bool = False
     # Set automatically by Vercel. On a serverless host every invocation may be
     # a fresh process, so a per-process connection pool multiplies by the number
@@ -84,6 +108,32 @@ class Settings(BaseSettings):
     @classmethod
     def _strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip("/")
+
+    @model_validator(mode="after")
+    def _resolve_database_url(self) -> Settings:
+        """Pick a connection string and give it the driver SQLAlchemy needs.
+
+        Managed providers hand out `postgres://` or `postgresql://` URLs, which
+        SQLAlchemy resolves to psycopg2 rather than the psycopg 3 driver that is
+        actually installed. Normalising here means a URL pasted straight from a
+        provider dashboard works.
+        """
+        # `model_fields_set` is the only reliable signal that a value was
+        # actually supplied, rather than left at the field default. Comparing
+        # against the default string breaks the moment the default changes.
+        if "database_url" not in self.model_fields_set:
+            for candidate in (
+                self.postgres_url,
+                self.postgres_prisma_url,
+                self.database_url_unpooled,
+                self.postgres_url_non_pooling,
+            ):
+                if candidate:
+                    self.database_url = candidate
+                    break
+
+        self.database_url = _with_psycopg_driver(self.database_url)
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:
