@@ -7,7 +7,7 @@
 
   "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
 
-  "host_permissions": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
 
   "background": {
     "service_worker": "service-worker.js",
@@ -30,6 +30,6 @@
   },
 
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
   }
 }
