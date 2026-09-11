@@ -1,17 +1,10 @@
-[project]
-name = "surfai-backend"
-version = "0.1.0"
-description = "SurfAI backend: agent orchestration, memory and safety for the SurfAI browser assistant"
-requires-python = ">=3.12"
-readme = "../README.md"
-license = { text = "MIT" }
-
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["app*"]
+# Tool configuration only.
+#
+# There is deliberately no [project] or [build-system] table. The backend is
+# never installed as a distribution: it is run from this directory, and
+# dependencies come from requirements.txt. Declaring one made Vercel's Python
+# builder treat backend/ as an installable package and try to build a wheel for
+# it, which failed and took the whole deployment with it.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
