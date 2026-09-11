@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from app.agents.page_agent import MalformedPageError
 from app.api import chat, favourites, health, observe, tasks
 from app.config import settings
 from app.database.database import check_connection, create_all
@@ -137,6 +138,24 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         content={
             "detail": f"Invalid request: {field} - {first.get('msg', 'validation failed')}",
             "code": "invalid_request",
+        },
+    )
+
+
+@app.exception_handler(MalformedPageError)
+async def malformed_page_handler(request: Request, exc: MalformedPageError):
+    """A snapshot the caller built wrong, reported as such.
+
+    Shares a shape with the request-validation handler above because it is the
+    same class of problem, just noticed a layer deeper: `page_context` is typed
+    loosely at the boundary on purpose, so FastAPI never sees the error.
+    """
+    logger.info("Rejected a malformed page snapshot on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": f"Invalid page snapshot: {exc}",
+            "code": "invalid_page_context",
         },
     )
 

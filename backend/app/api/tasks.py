@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import TERMINAL_STATES, Orchestrator
+from app.agents.page_agent import validate_page_snapshot
 from app.api.deps import get_orchestrator
 from app.api.schemas import ContinueRequest, DirectiveResponse, TaskCreate
 from app.database.database import get_db
@@ -130,7 +131,14 @@ def _merge_page(page_context: dict, tab_context) -> dict:  # noqa: ANN001
     Some pages (the Chrome Web Store, `chrome://` URLs) block content scripts.
     The agent still gets the tab identity and can report that it cannot see the
     page, instead of failing opaquely.
+
+    Also the one place every entry point turns client page data into something
+    the rest of the backend works with, which makes it where a snapshot that
+    does not parse gets rejected. Checking it deeper only covered the branches
+    that build a `SemanticPage`; a question is answered straight from this dict
+    and would otherwise take a malformed snapshot without complaint.
     """
+    validate_page_snapshot(page_context)
     page = dict(page_context or {})
     if not page.get("url") and tab_context is not None:
         page["url"] = tab_context.url

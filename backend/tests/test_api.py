@@ -442,3 +442,118 @@ def test_malformed_json_body_is_reported_cleanly(client) -> None:
     response = client.post("/api/chat", json={"nope": 1})
     assert response.status_code == 422
     assert "Traceback" not in response.text
+
+
+def test_a_malformed_page_snapshot_blames_the_request_not_the_server(client) -> None:
+    """A snapshot the extension built wrong is a client error, not a 500.
+
+    `page_context` is deliberately typed loosely at the boundary so an unknown
+    key does not break the request, which meant the real parse happened deeper
+    and its failure surfaced as "SurfAI hit an unexpected error". A content
+    script left over from an older version produces exactly this, and that
+    message gives whoever is debugging it nothing to go on.
+    """
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "summarise this",
+            # `type` is required on every element; this one predates it.
+            "page_context": {"url": "https://example.com", "elements": [{"id": "e1"}]},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "Traceback" not in response.text
+
+
+def test_the_malformed_snapshot_error_names_the_offending_field(client) -> None:
+    """Otherwise it is no more useful than the 500 it replaces."""
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "summarise this",
+            "page_context": {"url": "https://example.com", "elements": [{"id": "e1"}]},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+    detail = response.json()["detail"]
+
+    assert "elements" in detail and "type" in detail, detail
+    # The name of the model is an implementation detail of ours, not the
+    # caller's problem, and neither is pydantic's documentation URL.
+    assert "SemanticPage" not in detail
+    assert "pydantic" not in detail.lower()
+
+
+def test_the_same_applies_to_starting_a_task(client) -> None:
+    """Every entry point parses the snapshot through the same place."""
+    response = client.post(
+        "/api/tasks",
+        json={
+            "request": "find a mouse",
+            "page_context": {"url": "https://example.com", "elements": [{"id": "e1"}]},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_and_to_observing(client) -> None:
+    response = client.post(
+        "/api/observe",
+        json={"page_context": {"url": "https://example.com", "elements": [{"id": "e1"}]}},
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_a_well_formed_snapshot_is_unaffected(client) -> None:
+    """The guard must not start rejecting the shape the extension really sends."""
+    response = client.post(
+        "/api/observe",
+        json={
+            "page_context": {
+                "url": "https://example.com",
+                "title": "Example",
+                "elements": [{"id": "e1", "type": "button", "text": "Go"}],
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["element_count"] == 1
+
+
+def test_an_empty_snapshot_is_still_allowed(client) -> None:
+    """Chat with no page open sends `{}`; that is normal, not malformed."""
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "what is the capital of France?",
+            "page_context": {},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_the_direct_answer_path_rejects_a_bad_snapshot_too(client, fake_llm) -> None:
+    """Routing depends on intent, so both branches need the same guard.
+
+    A question goes straight to the assistant without ever building a
+    `SemanticPage`, so the first fix caught this only on the agent branch. Live
+    Groq classified "summarise this" as a question and happily answered 200 on
+    a snapshot the task endpoint had just rejected with a 422.
+    """
+    fake_llm.push({"intent": "question"})
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "summarise this",
+            "page_context": {"url": "https://example.com", "elements": [{"id": "e1"}]},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "elements" in response.json()["detail"]
