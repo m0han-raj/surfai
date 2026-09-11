@@ -288,3 +288,80 @@ def test_a_weak_reference_still_yields_to_a_general_opener() -> None:
 def test_a_bare_page_reference_needs_no_help() -> None:
     for message in ("summarise this", "what am i looking at", "what is on this page"):
         assert needs_page_context(message) is True, message
+
+
+# --- a page that could not be read ----------------------------------------
+
+
+def _unreadable(url: str = "https://flights.example.com/tokyo") -> dict:
+    """What the panel sends when capturing the page failed.
+
+    The tab identity survives, because the extension knows which tab it is
+    looking at; the content does not, because a content script could not run
+    there.
+    """
+    return {"url": url, "title": "Flights to Tokyo", "summary": "", "elements": []}
+
+
+@pytest.mark.asyncio
+async def test_it_says_it_cannot_see_a_page_it_could_not_read(fake_llm) -> None:
+    """Rather than answering from the title and whatever came before.
+
+    Left to itself the model writes a confident description built from the tab
+    title and the conversation so far: "the page is titled X, it appears to
+    be...". That reads exactly like an answer about the page, and the user has
+    no way to tell it is a guess. Worse, when the previous turns were about a
+    different site, the guess inherits that site's subject, which is precisely
+    what "it still answers about the old website" looks like from the outside.
+    """
+    reply = await Assistant(fake_llm).answer(
+        "what is this page about?",
+        page=_unreadable(),
+        history=[
+            {"role": "user", "content": "what is this page about?"},
+            {"role": "assistant", "content": "A recipe for Classic Carbonara."},
+        ],
+    )
+
+    assert reply.used_page is False
+    assert "cannot" in reply.message.lower() or "could not" in reply.message.lower()
+    assert "carbonara" not in reply.message.lower()
+    # And it names the page it is talking about, so the user can see whether
+    # SurfAI is even looking at the right tab.
+    assert "flights.example.com" in reply.message
+
+
+@pytest.mark.asyncio
+async def test_the_model_is_not_consulted_about_a_page_it_cannot_see(fake_llm) -> None:
+    """No request, so no tokens and no chance to improvise."""
+    await Assistant(fake_llm).answer("summarise this page", page=_unreadable())
+    assert fake_llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_general_question_is_unaffected_by_an_unreadable_page(fake_llm) -> None:
+    """The page is irrelevant to it, so its absence should be irrelevant too."""
+    fake_llm.text = "Paris."
+    reply = await Assistant(fake_llm).answer(
+        "what is the capital of france?", page=_unreadable()
+    )
+
+    assert reply.message == "Paris."
+    assert reply.used_page is False
+
+
+@pytest.mark.asyncio
+async def test_a_page_with_controls_but_no_text_still_counts_as_read(fake_llm) -> None:
+    """An app screen can be almost all buttons. That is a readable page."""
+    fake_llm.text = "It is a checkout screen."
+    reply = await Assistant(fake_llm).answer(
+        "what is on this page?",
+        page={
+            "url": "https://shop.example.com/checkout",
+            "title": "Checkout",
+            "summary": "",
+            "elements": [{"id": "e1", "type": "button", "text": "Place order"}],
+        },
+    )
+
+    assert reply.used_page is True

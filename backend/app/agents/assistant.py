@@ -20,6 +20,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from app.config import settings
 from app.llm.prompts import ASSISTANT_SYSTEM, format_page_context
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Phrases that point at whatever the user is currently looking at. A question
 # containing one of these needs the page; "explain recursion" does not.
+#
 # An unambiguous reference to what the user is looking at. Nothing overrides
 # these: whatever else the sentence is doing, it has named the page.
 _NAMES_THE_PAGE = re.compile(
@@ -66,6 +68,37 @@ _CLEARLY_GENERAL = re.compile(
     r"give me an example)\b",
     re.IGNORECASE,
 )
+
+
+def _is_readable(page: dict[str, Any] | None) -> bool:
+    """Did the extension actually manage to read this page?
+
+    A page with controls and no prose is perfectly readable: an app screen can
+    be almost entirely buttons. A page with neither is one where the content
+    script could not run, which the panel reports by sending the tab identity
+    and nothing else.
+    """
+    if not page:
+        return False
+    return bool((page.get("summary") or "").strip()) or bool(page.get("elements"))
+
+
+def _cannot_see_page(page: dict[str, Any] | None) -> str:
+    """Say which page, so the user can tell whether it is even the right tab."""
+    url = (page or {}).get("url") or ""
+    where = ""
+    if url:
+        try:
+            host = urlparse(url).netloc
+            where = f" at {host}" if host else ""
+        except ValueError:
+            where = ""
+
+    return (
+        f"I cannot read the page{where} right now, so I would only be guessing about it. "
+        "This usually means SurfAI has not been given access to the site: open Settings "
+        "and turn on page access. Chrome also blocks its own pages and the Web Store."
+    )
 
 
 @dataclass
@@ -131,6 +164,16 @@ class Assistant:
         warnings: list[str] = []
         scan: InjectionScan | None = None
         clean: dict[str, Any] | None = None
+
+        if use_page and not _is_readable(page):
+            # The question is about the page and there is no page. Answering
+            # anyway is the failure that matters here: given a tab title and a
+            # few earlier turns, the model writes a confident description of a
+            # page it never saw, and when those turns were about a different
+            # site the description quietly inherits that site's subject. From
+            # the outside that looks exactly like SurfAI ignoring the tab you
+            # switched to. Saying so costs a request and buys the truth.
+            return AssistantReply(message=_cannot_see_page(page), used_page=False)
 
         if use_page and page and page.get("elements") is not None:
             clean, scan = sanitize_page(page)
