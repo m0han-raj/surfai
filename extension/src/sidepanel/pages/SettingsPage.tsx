@@ -74,11 +74,17 @@ export default function SettingsPage() {
   }, []);
 
   async function togglePageAccess() {
+    // Nothing may be awaited before requestPageAccess(). Chrome honours the
+    // prompt only while the click is still on the stack, and one await ends
+    // that silently: the button depresses and no dialog ever appears. An
+    // async function runs to its first await synchronously, which is why the
+    // call below is safe and why nothing must be inserted above it.
+    const pending = pageAccess ? revokePageAccess() : requestPageAccess();
     setAccessBusy(true);
+
+    await pending;
     // Re-read rather than assume: the user can decline the prompt, and can
     // also change this in Chrome's own Site access controls behind our back.
-    if (pageAccess) await revokePageAccess();
-    else await requestPageAccess();
     setPageAccess(await hasPageAccess());
     setAccessBusy(false);
   }

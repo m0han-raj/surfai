@@ -67,12 +67,31 @@ describe('requestPageAccess', () => {
     expect(await requestPageAccess()).toBe(false);
   });
 
-  it('does not prompt again when access is already held', async () => {
-    // Chrome would resolve immediately anyway, but a prompt that flashes for
-    // no reason makes the button look broken.
+  it('prompts synchronously, because the user gesture does not survive an await', () => {
+    // This is the whole ballgame. Chrome only honours permissions.request()
+    // while the click that triggered it is still on the stack, and a single
+    // await beforehand ends that. The symptom is silent: the button depresses,
+    // no prompt appears, nothing throws, and nothing is logged.
+    //
+    // An earlier version of this file asked "is it already granted?" first,
+    // out of a worry about a prompt flashing for no reason, and bought that
+    // cosmetic point at the cost of the feature working at all. Deliberately
+    // not awaited here: the call must already have happened.
+    const { request } = installPermissions(false);
+
+    void requestPageAccess();
+
+    expect(request).toHaveBeenCalledWith({ origins: ['<all_urls>'] });
+  });
+
+  it('leaves the already-granted case to the caller', () => {
+    // The panel renders a different button in that state, so it never asks.
+    // Checking here would mean an await, and an await means no prompt.
     const { request } = installPermissions(true);
-    expect(await requestPageAccess()).toBe(true);
-    expect(request).not.toHaveBeenCalled();
+
+    void requestPageAccess();
+
+    expect(request).toHaveBeenCalled();
   });
 
   it('returns false rather than throwing when the prompt errors', async () => {
