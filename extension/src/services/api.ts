@@ -168,6 +168,31 @@ function describeStatus(status: number, base: string): string {
 
 // --- health ---------------------------------------------------------------
 
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  message_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface StoredMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'notice';
+  content: string;
+  page_url: string | null;
+  warnings: string[];
+  created_at: string | null;
+}
+
+export interface StoredConversation {
+  id: string;
+  title: string;
+  created_at: string | null;
+  updated_at: string | null;
+  messages: StoredMessage[];
+}
+
 export interface HealthResponse {
   status: string;
   app: string;
@@ -217,6 +242,7 @@ export const api = {
     page_context: SemanticPage | Record<string, unknown>;
     tab_context: TabContext;
     history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    conversation_id?: string | null;
   }) =>
     request<Directive>('/api/chat', {
       method: 'POST',
@@ -261,6 +287,22 @@ export const api = {
 
   deleteTask: (taskId: string) =>
     request<void>(`/api/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }),
+
+  // --- conversations ------------------------------------------------------
+
+  listConversations: (limit = 50) =>
+    request<{ conversations: ConversationSummary[]; total: number }>(
+      `/api/conversations?limit=${limit}`,
+      { method: 'GET' },
+    ),
+
+  getConversation: (id: string) =>
+    request<StoredConversation>(`/api/conversations/${encodeURIComponent(id)}`, {
+      method: 'GET',
+    }),
+
+  deleteConversation: (id: string) =>
+    request<void>(`/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   // --- favourites ---------------------------------------------------------
 

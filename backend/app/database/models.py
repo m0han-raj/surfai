@@ -105,6 +105,75 @@ class Task(Base):
     )
 
 
+class Conversation(Base):
+    """One chat thread.
+
+    Chat used to live only in the panel's React state, so closing the side
+    panel discarded it. The History tab showed agent tasks, which is a
+    different thing: a task is something SurfAI did, a conversation is
+    something you had.
+
+    Shaped after Task/TaskAction deliberately, down to the cascade and the
+    indexes, because it is the same parent/child problem and the repository and
+    endpoint patterns around that shape already exist.
+    """
+
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local-user")
+    # The first thing the user said, truncated. Deriving it costs nothing,
+    # where asking a model for a title would cost a request per conversation.
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, server_default=func.now()
+    )
+
+    messages: Mapped[list[ConversationMessage]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationMessage.created_at",
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        Index("ix_conversations_user_id", "user_id"),
+        Index("ix_conversations_updated_at", "updated_at"),
+    )
+
+
+class ConversationMessage(Base):
+    """One turn, or one note about the conversation.
+
+    `page_url` records which page a turn was about, never the page itself:
+    reopening a conversation should show where its subject changed, and
+    persisting page content is a line this project does not cross.
+    """
+
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    # "user", "assistant", or "notice" for SurfAI remarking that the page
+    # underneath the conversation changed.
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    page_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    warnings: Mapped[list] = mapped_column(JSONType, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now, server_default=func.now()
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+    __table_args__ = (Index("ix_conversation_messages_conversation_id", "conversation_id"),)
+
+
 class AgentSession(Base):
     """Live state for an in-flight task.
 

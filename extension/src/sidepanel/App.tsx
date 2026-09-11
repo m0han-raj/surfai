@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { MessageSquare, Bookmark, History, Settings, PenSquare } from 'lucide-react';
 import type { Favourite, FavouriteDraft } from '../types/favourites';
 import { api, ApiError } from '../services/api';
+import { anchorOf, toChatMessages } from './storedConversation';
 import { getSettings, onSettingsChanged } from '../services/storage';
 import { openUrl } from '../services/messaging';
 import { useAgent } from './useAgent';
@@ -68,6 +69,21 @@ export default function App() {
       void loadFavourites();
     }
   }, [agent.running, agent.state, loadFavourites]);
+
+  const handleOpenConversation = useCallback(
+    async (id: string) => {
+      try {
+        const stored = await api.getConversation(id);
+        // Restore the page it was last about too, or the first tab switch
+        // after reopening is measured against the wrong page.
+        agent.resume(id, toChatMessages(stored), anchorOf(stored));
+        setView('chat');
+      } catch (error) {
+        console.warn('[SurfAI] Could not open that conversation', error);
+      }
+    },
+    [agent],
+  );
 
   const handleSend = useCallback(
     async (message: string) => {
@@ -182,7 +198,7 @@ export default function App() {
           />
         )}
 
-        {view === 'history' && <HistoryPage />}
+        {view === 'history' && <HistoryPage onOpenConversation={handleOpenConversation} />}
         {view === 'settings' && <SettingsPage />}
       </main>
 

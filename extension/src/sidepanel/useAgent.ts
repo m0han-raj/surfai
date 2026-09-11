@@ -226,6 +226,7 @@ export function useAgent() {
 
   const clear = useCallback(() => {
     anchorRef.current = '';
+    runner.newConversation();
     pendingIdRef.current = null;
     setMessages([]);
     setState('IDLE');
@@ -241,12 +242,30 @@ export function useAgent() {
     setMessages((current) => withContextNotice(current, domain, anchorRef.current, Date.now()));
   }, []);
 
+  /**
+   * Show a stored conversation, and continue it.
+   *
+   * Reopening a thread from History should not fork it: the next thing said
+   * belongs to the same conversation it is being read in.
+   */
+  const resume = useCallback(
+    (id: string, stored: ChatMessage[], anchor: string) => {
+      runner.resumeConversation(id);
+      anchorRef.current = anchor;
+      pendingIdRef.current = null;
+      setMessages(stored);
+      setState('IDLE');
+    },
+    [runner],
+  );
+
   return {
     messages,
     state,
     running,
     pendingConfirmation,
     send,
+    resume,
     noteCurrentPage,
     runFavourite,
     stop,

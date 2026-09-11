@@ -557,3 +557,102 @@ def test_the_direct_answer_path_rejects_a_bad_snapshot_too(client, fake_llm) -> 
 
     assert response.status_code == 422, response.text
     assert "elements" in response.json()["detail"]
+
+
+# --- stored chat history --------------------------------------------------
+
+
+def test_a_chat_turn_is_recorded(client, fake_llm) -> None:
+    """Recorded by the backend, so closing the panel mid-answer loses nothing."""
+    fake_llm.push({"intent": "question"})
+
+    directive = client.post(
+        "/api/chat",
+        json={
+            "message": "what is the capital of France?",
+            "page_context": {},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    ).json()
+
+    assert directive["conversation_id"], "the reply must say where the turn was stored"
+
+    stored = client.get(f"/api/conversations/{directive['conversation_id']}").json()
+    assert [m["role"] for m in stored["messages"]] == ["user", "assistant"]
+    assert stored["messages"][0]["content"] == "what is the capital of France?"
+
+
+def test_a_second_turn_joins_the_first(client, fake_llm) -> None:
+    fake_llm.push({"intent": "question"}, {"intent": "question"})
+    body = {
+        "message": "hello",
+        "page_context": {},
+        "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+    }
+
+    first = client.post("/api/chat", json=body).json()["conversation_id"]
+    second = client.post(
+        "/api/chat", json={**body, "message": "again", "conversation_id": first}
+    ).json()["conversation_id"]
+
+    assert second == first
+    assert len(client.get(f"/api/conversations/{first}").json()["messages"]) == 4
+
+
+def test_history_lists_conversations_newest_first(client, fake_llm) -> None:
+    fake_llm.push({"intent": "question"}, {"intent": "question"})
+    body = {
+        "message": "older",
+        "page_context": {},
+        "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+    }
+    client.post("/api/chat", json=body)
+    client.post("/api/chat", json={**body, "message": "newer"})
+
+    listed = client.get("/api/conversations").json()["conversations"]
+    assert [c["title"] for c in listed][:2] == ["newer", "older"]
+
+
+def test_a_conversation_can_be_deleted(client, fake_llm) -> None:
+    fake_llm.push({"intent": "question"})
+    conversation_id = client.post(
+        "/api/chat",
+        json={
+            "message": "forget this",
+            "page_context": {},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    ).json()["conversation_id"]
+
+    assert client.delete(f"/api/conversations/{conversation_id}").status_code == 204
+    assert client.get(f"/api/conversations/{conversation_id}").status_code == 404
+
+
+def test_an_unknown_conversation_is_a_404_not_a_500(client) -> None:
+    assert client.get("/api/conversations/nope").status_code == 404
+
+
+def test_a_failure_to_record_history_still_returns_the_answer(
+    client, fake_llm, monkeypatch
+) -> None:
+    """History is a convenience. A convenience that can swallow the answer you
+    were waiting for is not one."""
+    from app.api import chat as chat_api
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("the history table is on fire")
+
+    monkeypatch.setattr(chat_api.ConversationRepository, "record", explode)
+    fake_llm.push({"intent": "question"})
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "what is the capital of France?",
+            "page_context": {},
+            "tab_context": {"url": "https://example.com", "title": "x", "tab_id": 1},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"], "the answer was lost to a history failure"

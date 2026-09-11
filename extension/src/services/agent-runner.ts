@@ -121,6 +121,19 @@ export class AgentRunner {
    * Most messages are answered directly by the backend and the loop never
    * starts; `handle` recognises that from the directive it gets back.
    */
+  /** The thread this panel session is appending to; the backend assigns it. */
+  private conversationId: string | null = null;
+
+  /** Start a fresh thread. The next turn gets a new conversation. */
+  newConversation(): void {
+    this.conversationId = null;
+  }
+
+  /** Continue an existing thread, after loading it from history. */
+  resumeConversation(id: string | null): void {
+    this.conversationId = id;
+  }
+
   async send(message: string, history: ChatTurn[] = []): Promise<void> {
     if (this.running) {
       this.callbacks.onError('A task is already running. Stop it before starting another.');
@@ -140,10 +153,14 @@ export class AgentRunner {
 
       const directive = await api.chat({
         message,
+        conversation_id: this.conversationId,
         page_context: page,
         tab_context: tab,
         history,
       });
+      // The backend decides where the turn landed; remembering it is what
+      // keeps the next one in the same thread.
+      if (directive.conversation_id) this.conversationId = directive.conversation_id;
       await this.handle(directive);
     } catch (error) {
       this.fail(error);

@@ -26,6 +26,7 @@ from app.api.deps import get_orchestrator
 from app.api.schemas import ChatRequest, DirectiveResponse
 from app.api.tasks import _merge_page
 from app.database.database import get_db
+from app.database.repositories.conversations import ConversationRepository
 from app.database.repositories.favourites import FavouriteRepository, to_dict
 from app.llm.openai_compatible import get_provider
 from app.llm.provider import LLMError, LLMUnavailableError
@@ -42,6 +43,32 @@ async def chat(
     session: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Answer, then record.
+
+    Recording happens here rather than at each of the handler's several return
+    points, so a branch added later cannot forget it.
+
+    Only a finished answer is stored. A directive that starts an agent task is
+    not one: its reply arrives later through /api/tasks/{id}/continue, and
+    writing the empty message here would leave a half-turn in the transcript.
+    Tasks keep their own history, which is a record of what SurfAI did rather
+    than of what was said.
+    """
+    directive = await _chat(payload, session, user, orchestrator)
+
+    if directive.get("type") == "answer":
+        page = _merge_page(payload.page_context, payload.tab_context)
+        _record(ConversationRepository(user.id), payload, directive, page)
+
+    return directive
+
+
+async def _chat(
+    payload: ChatRequest,
+    session: Session,
+    user: User,
+    orchestrator: Orchestrator,
 ) -> dict:
     page = _merge_page(payload.page_context, payload.tab_context)
     repo = FavouriteRepository(session, user.id)
@@ -166,6 +193,31 @@ async def chat(
         if favourite.get("url") and not _same_page(page.get("url", ""), favourite["url"]):
             data["favourite_navigation"] = favourite["url"]
     return data
+
+
+def _record(
+    history: ConversationRepository,
+    payload: ChatRequest,
+    directive: dict,
+    page: dict,
+) -> dict:
+    """Store the exchange and stamp the directive with where it landed.
+
+    Never raises. History is a convenience, and a convenience that can swallow
+    the answer the user is waiting for is not one; a failure here is logged and
+    the reply goes out unchanged, minus the id.
+    """
+    try:
+        directive["conversation_id"] = history.record(
+            conversation_id=payload.conversation_id,
+            user_message=payload.message,
+            reply=directive.get("message", ""),
+            page_url=page.get("url") or None,
+            warnings=list(directive.get("warnings") or []),
+        )
+    except Exception:  # noqa: BLE001 - the answer matters more than the record
+        logger.exception("Could not record the conversation")
+    return directive
 
 
 def _answer(message: str, **extra) -> dict:

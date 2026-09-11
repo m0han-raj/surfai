@@ -24,6 +24,8 @@ export interface Directive {
   favourite?: Record<string, unknown> | null;
   favourites?: Record<string, unknown>[] | null;
   favourite_navigation?: string;
+  /** Where this turn was stored; sent back on the next turn to stay in thread. */
+  conversation_id?: string | null;
 }
 
 /** One line in the Agent Activity log. */

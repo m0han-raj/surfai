@@ -1004,3 +1004,61 @@ a:focus:not(:focus-visible) {
   font-size: var(--text-sm);
   text-align: center;
 }
+
+/* --- saved conversations ------------------------------------------------- */
+
+.convo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.convo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The whole row opens the thread; the delete button is the only thing that
+   does not, so it sits outside this button rather than inside it. */
+.convo__open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'icon title' 'icon meta';
+  gap: 0 7px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.convo__open:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+.convo__open > svg { grid-area: icon; color: var(--fg-muted); }
+
+.convo__title {
+  grid-area: title;
+  font-size: var(--text-sm);
+  /* One line: a thread's first message can be a paragraph. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.convo__meta {
+  grid-area: meta;
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}

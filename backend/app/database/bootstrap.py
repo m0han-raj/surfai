@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # migrations/versions by test_schema_revision_matches_the_latest_migration,
 # because a stale value here would stamp a fresh database with a revision it
 # does not actually have and every later migration would be skipped.
-SCHEMA_REVISION = "0002"
+SCHEMA_REVISION = "0003"
 
 # Any stable 64-bit constant. Derived from the project name so it cannot
 # collide with a lock another application on the same database takes.

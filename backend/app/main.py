@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.agents.page_agent import MalformedPageError
-from app.api import chat, favourites, health, observe, tasks
+from app.api import chat, conversations, favourites, health, observe, tasks
 from app.config import settings
 from app.database.database import check_connection, create_all
 from app.llm.openai_compatible import get_provider
@@ -182,6 +182,7 @@ async def unhandled_error_handler(request: Request, exc: Exception):
 
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(conversations.router)
 app.include_router(tasks.router)
 app.include_router(favourites.router)
 app.include_router(observe.router)

@@ -31,6 +31,9 @@ class ChatRequest(BaseModel):
     page_context: dict[str, Any] = Field(default_factory=dict)
     tab_context: TabContext = Field(default_factory=TabContext)
     task_id: str | None = None
+    # The thread to append to. Absent starts a new one; unknown, or somebody
+    # else's, also starts a new one rather than failing.
+    conversation_id: str | None = None
     # Recent turns only. The backend holds no conversation state; the panel
     # sends what it wants remembered, and the assistant caps it.
     history: list[ChatTurn] = Field(default_factory=list, max_length=20)
@@ -61,6 +64,9 @@ class DirectiveResponse(BaseModel):
     favourite: dict[str, Any] | None = None
     favourites: list[dict[str, Any]] | None = None
     intent: str | None = None
+    # Where this turn was recorded. The panel sends it back on the next turn
+    # so the exchange joins the same thread.
+    conversation_id: str | None = None
 
 
 class FavouriteCreate(BaseModel):
