@@ -6,6 +6,8 @@
  * belong to the backend, and nothing sensitive is cached locally.
  */
 
+import { DEFAULT_BACKEND_URL } from './constants';
+
 export interface SurfAISettings {
   backendUrl: string;
   /** Cap on elements captured per snapshot; lower is cheaper and faster. */
@@ -17,7 +19,7 @@ export interface SurfAISettings {
 }
 
 export const DEFAULT_SETTINGS: SurfAISettings = {
-  backendUrl: 'http://localhost:8000',
+  backendUrl: DEFAULT_BACKEND_URL,
   maxElements: 60,
   actionTimeoutMs: 10_000,
   autoRunLowRisk: true,
@@ -26,6 +28,9 @@ export const DEFAULT_SETTINGS: SurfAISettings = {
 
 const SETTINGS_KEY = 'surfai.settings';
 const DRAFT_KEY = 'surfai.draft';
+// Set once the backend address has been probed for, so a later probe never
+// second-guesses an address the user has since chosen by hand.
+const DISCOVERY_KEY = 'surfai.backend-discovered';
 
 /** Available only inside the extension; guarded so unit tests can run in jsdom. */
 function hasChromeStorage(): boolean {
@@ -73,6 +78,15 @@ export async function saveSettings(patch: Partial<SurfAISettings>): Promise<Surf
 export async function resetSettings(): Promise<SurfAISettings> {
   await writeKey(SETTINGS_KEY, DEFAULT_SETTINGS);
   return DEFAULT_SETTINGS;
+}
+
+/** Has the one-time search for a local backend already run? */
+export async function hasSearchedForBackend(): Promise<boolean> {
+  return readKey<boolean>(DISCOVERY_KEY, false);
+}
+
+export async function markBackendSearched(): Promise<void> {
+  await writeKey(DISCOVERY_KEY, true);
 }
 
 /** Preserve an unsent message across panel close/reopen. */

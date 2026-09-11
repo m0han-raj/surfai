@@ -18,8 +18,10 @@ import type { SemanticPage } from '@shared/types';
 import type { TabContext } from '../types/messages';
 import { getSettings } from './storage';
 import { getToken, invalidateToken, isAuthConfigured } from './auth';
+import { DEFAULT_BACKEND_URL } from './constants';
+import { ensureBackendUrl } from './discover';
 
-export const DEFAULT_BACKEND_URL = 'http://localhost:8000';
+export { DEFAULT_BACKEND_URL };
 
 export class ApiError extends Error {
   constructor(
@@ -34,7 +36,18 @@ export class ApiError extends Error {
   }
 }
 
+// Kicked off by the first request of the panel session and awaited by all of
+// them, so concurrent callers do not each start their own search.
+let firstRun: Promise<unknown> | null = null;
+
 async function baseUrl(): Promise<string> {
+  // A failed search must not fail the request; it just leaves the default in
+  // place, and the request then reports the backend as unreachable as before.
+  firstRun ??= ensureBackendUrl().catch(() => undefined);
+  await firstRun;
+
+  // Read settings after the search rather than reusing its result, so an
+  // address the user edits mid-session takes effect on the very next request.
   const settings = await getSettings();
   return (settings.backendUrl || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
 }

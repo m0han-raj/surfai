@@ -52,10 +52,14 @@ async def lifespan(app: FastAPI):
     connected, error = check_connection()
     if connected:
         if settings.is_serverless:
-            # Every cold start would otherwise issue DDL, and two starting at
-            # once would race. Serverless deployments run `alembic upgrade head`
-            # as a deliberate step instead.
-            logger.info("Serverless host: skipping implicit schema creation")
+            # A managed provider's credentials never leave the platform, so a
+            # fresh deployment has nowhere to run `alembic upgrade head`.
+            # Bootstrap covers an empty database only, under an advisory lock,
+            # and leaves an existing schema alone. Migrations remain Alembic's.
+            from app.database.bootstrap import ensure_schema
+
+            if ensure_schema():
+                logger.info("Created the schema on an empty database")
         else:
             try:
                 create_all()
