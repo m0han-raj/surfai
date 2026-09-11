@@ -87,6 +87,17 @@ def postgres(monkeypatch):
     if not url:
         pytest.skip("set TEST_POSTGRES_URL to exercise the PostgreSQL paths")
 
+    # This fixture drops every application table, so it must never be pointed
+    # at a database anyone cares about. Requiring the name to say so is a
+    # cheap contract: it already cost one local development database.
+    name = url.rsplit("/", 1)[-1].split("?")[0]
+    if "test" not in name.lower():
+        pytest.fail(
+            f"TEST_POSTGRES_URL points at a database named {name!r}. These tests "
+            "drop every application table; use a scratch database whose name "
+            "contains 'test'."
+        )
+
     from app.database import database
 
     database.configure_engine(url)
