@@ -1,0 +1,10 @@
+# Ruff configuration.
+#
+# Kept out of pyproject.toml for the same reason as pytest.ini: Vercel's Python
+# builder tries to `uv lock` any pyproject.toml it finds.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
