@@ -1,0 +1,159 @@
+/*
+ * SurfAI design tokens.
+ *
+ * The panel is narrow (320-480px) and sits beside real work, so the visual
+ * language is a developer tool's: neutral ground, one restrained accent, hairline
+ * borders, compact type. No gradients, glass, or decorative colour.
+ *
+ * Every colour is defined once on :root and only *redefined* in the dark
+ * blocks, so a token can never be missing in one theme.
+ */
+
+:root {
+  /* Surfaces */
+  --bg: #ffffff;
+  --bg-subtle: #f7f7f8;
+  --bg-inset: #f0f0f2;
+  --bg-hover: #efeff1;
+  --bg-active: #e6e6e9;
+
+  /* Text */
+  --fg: #18181b;
+  --fg-muted: #5f5f6b;
+  --fg-subtle: #8a8a96;
+  --fg-inverted: #ffffff;
+
+  /* Lines */
+  --border: #e2e2e6;
+  --border-strong: #c9c9d0;
+  --focus-ring: #2563eb;
+
+  /* One accent, used sparingly for primary action and active state. */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #eff4ff;
+  --accent-border: #bfd3fe;
+
+  /* Status. Each pairs a colour with an icon or label, never colour alone. */
+  --success: #15803d;
+  --success-subtle: #f0fdf4;
+  --success-border: #bbf7d0;
+
+  --warning: #a16207;
+  --warning-subtle: #fefce8;
+  --warning-border: #fde68a;
+
+  --danger: #b91c1c;
+  --danger-subtle: #fef2f2;
+  --danger-border: #fecaca;
+
+  /* Type */
+  --font-sans: 'Inter', 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+
+  /* Spacing: a 4px rhythm keeps a dense panel legible. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+
+  /* Elevation is used only for true overlays. */
+  --shadow-overlay: 0 8px 24px rgba(16, 16, 20, 0.16);
+
+  --header-height: 44px;
+  --nav-height: 38px;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #131316;
+  --bg-subtle: #1a1a1f;
+  --bg-inset: #202027;
+  --bg-hover: #26262e;
+  --bg-active: #2f2f38;
+
+  --fg: #f2f2f4;
+  --fg-muted: #a1a1ad;
+  --fg-subtle: #74747f;
+  --fg-inverted: #131316;
+
+  --border: #2c2c34;
+  --border-strong: #3d3d47;
+  --focus-ring: #60a5fa;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-subtle: #16223c;
+  --accent-border: #2b4a85;
+
+  --success: #4ade80;
+  --success-subtle: #12251a;
+  --success-border: #1f4d31;
+
+  --warning: #fbbf24;
+  --warning-subtle: #2a2113;
+  --warning-border: #5c4415;
+
+  --danger: #f87171;
+  --danger-subtle: #2c1717;
+  --danger-border: #5e2626;
+
+  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* Follow the OS when the user has not chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --bg: #131316;
+    --bg-subtle: #1a1a1f;
+    --bg-inset: #202027;
+    --bg-hover: #26262e;
+    --bg-active: #2f2f38;
+
+    --fg: #f2f2f4;
+    --fg-muted: #a1a1ad;
+    --fg-subtle: #74747f;
+    --fg-inverted: #131316;
+
+    --border: #2c2c34;
+    --border-strong: #3d3d47;
+    --focus-ring: #60a5fa;
+
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --accent-subtle: #16223c;
+    --accent-border: #2b4a85;
+
+    --success: #4ade80;
+    --success-subtle: #12251a;
+    --success-border: #1f4d31;
+
+    --warning: #fbbf24;
+    --warning-subtle: #2a2113;
+    --warning-border: #5c4415;
+
+    --danger: #f87171;
+    --danger-subtle: #2c1717;
+    --danger-border: #5e2626;
+
+    --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+    color-scheme: dark;
+  }
+}

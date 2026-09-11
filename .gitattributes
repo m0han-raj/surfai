@@ -1,0 +1,14 @@
+# Normalise line endings so the repository is identical on every platform.
+* text=auto eol=lf
+
+# Shell scripts must keep LF: the Docker entrypoint runs in Linux and CRLF
+# would break its shebang.
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Binary assets must never be transformed.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

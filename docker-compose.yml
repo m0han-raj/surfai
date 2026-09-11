@@ -1,0 +1,61 @@
+# SurfAI local stack: FastAPI backend + PostgreSQL.
+# The Chrome extension is deliberately not containerised -- it is loaded
+# unpacked into your browser (see README.md).
+
+name: surfai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: surfai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-surfai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-surfai}
+      POSTGRES_DB: ${POSTGRES_DB:-surfai}
+    ports:
+      # Exposed on localhost only so the database is never reachable from the
+      # network, even on an untrusted Wi-Fi connection.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - surfai-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-surfai} -d ${POSTGRES_DB:-surfai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: surfai-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-surfai}:${POSTGRES_PASSWORD:-surfai}@postgres:5432/${POSTGRES_DB:-surfai}
+      # Default points at an LLM runtime on the host machine. On Linux, either
+      # run compose with --add-host=host.docker.internal:host-gateway (already
+      # set below) or set LLM_BASE_URL to your host IP.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-oss-20b}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-120}
+      MAX_AGENT_STEPS: ${MAX_AGENT_STEPS:-15}
+      MAX_RETRIES: ${MAX_RETRIES:-2}
+      ACTION_TIMEOUT_MS: ${ACTION_TIMEOUT_MS:-10000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-chrome-extension://*}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    extra_hosts:
+      # Lets the container reach an LLM running on the host on Linux too.
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  surfai-postgres-data:
+    name: surfai-postgres-data

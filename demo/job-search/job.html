@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo Jobs - Role</title>
+    <link rel="stylesheet" href="../shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Demo Jobs</a>
+      <nav aria-label="Primary"><a href="index.html">Back to search</a></nav>
+    </header>
+
+    <main>
+      <article class="article">
+        <h1 id="job-title">Role</h1>
+        <p class="byline" id="job-meta"></p>
+        <h2>Required skills</h2>
+        <ul id="job-skills"></ul>
+        <h2>About this role</h2>
+        <p id="job-description"></p>
+        <p><button type="button" id="apply">Submit application</button></p>
+        <p class="notice">This is a static demo page. No application is ever submitted.</p>
+      </article>
+    </main>
+
+    <script src="jobs.js"></script>
+    <script>
+      (function () {
+        var id = Number(new URLSearchParams(location.search).get('id'));
+        var job = (window.DEMO_JOBS || []).find(function (j) { return j.id === id; });
+
+        if (!job) {
+          document.getElementById('job-title').textContent = 'Role not found';
+          return;
+        }
+
+        document.title = 'Demo Jobs - ' + job.title;
+        document.getElementById('job-title').textContent = job.title;
+        document.getElementById('job-meta').textContent =
+          [job.company, job.location, job.experience + ' years', job.type].join(' · ');
+
+        var list = document.getElementById('job-skills');
+        job.skills.forEach(function (skill) {
+          var li = document.createElement('li');
+          li.textContent = skill;
+          list.appendChild(li);
+        });
+
+        document.getElementById('job-description').textContent =
+          'A fictional ' + job.type.toLowerCase() + ' position at ' + job.company +
+          ' based in ' + job.location + ', suited to candidates with ' + job.experience +
+          ' years of experience. This listing exists only to exercise SurfAI.';
+
+        document.getElementById('apply').addEventListener('click', function () {
+          window.alert('This is a demo job board. No application was submitted.');
+        });
+      })();
+    </script>
+  </body>
+</html>

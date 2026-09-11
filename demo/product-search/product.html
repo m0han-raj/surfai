@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo Store - Product</title>
+    <link rel="stylesheet" href="../shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html">Demo Store</a>
+      <nav aria-label="Primary"><a href="index.html">Back to search</a></nav>
+    </header>
+
+    <main>
+      <article class="article" id="detail">
+        <h1 id="product-name">Product</h1>
+        <p class="byline" id="product-meta"></p>
+        <p class="product-price" id="product-price"></p>
+        <table>
+          <tbody id="spec-table"></tbody>
+        </table>
+        <p>
+          <button type="button" id="add-to-cart" class="secondary">Add to cart</button>
+          <button type="button" id="buy-now">Buy now</button>
+        </p>
+        <p class="notice">
+          This is a static demo page. No cart exists and nothing can be purchased.
+        </p>
+      </article>
+    </main>
+
+    <script src="products.js"></script>
+    <script>
+      (function () {
+        var id = Number(new URLSearchParams(location.search).get('id'));
+        var product = (window.DEMO_PRODUCTS || []).find(function (p) { return p.id === id; });
+
+        if (!product) {
+          document.getElementById('product-name').textContent = 'Product not found';
+          return;
+        }
+
+        document.title = 'Demo Store - ' + product.name;
+        document.getElementById('product-name').textContent = product.name;
+        document.getElementById('product-meta').textContent =
+          product.brand + ' · ' + product.category;
+        document.getElementById('product-price').textContent =
+          '₹' + product.price.toLocaleString('en-IN');
+
+        var rows = [
+          ['Brand', product.brand],
+          ['Category', product.category],
+          ['Graphics', product.gpu || 'Not applicable'],
+          ['Memory', product.ram || 'Not applicable'],
+          ['Availability', product.stock ? 'In stock' : 'Out of stock'],
+        ];
+        var table = document.getElementById('spec-table');
+        rows.forEach(function (row) {
+          var tr = document.createElement('tr');
+          var th = document.createElement('th');
+          th.textContent = row[0];
+          var td = document.createElement('td');
+          td.textContent = row[1];
+          tr.append(th, td);
+          table.appendChild(tr);
+        });
+
+        document.getElementById('buy-now').addEventListener('click', function () {
+          window.alert('This is a demo store. Nothing was ordered.');
+        });
+        document.getElementById('add-to-cart').addEventListener('click', function () {
+          window.alert('This is a demo store. There is no cart.');
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo Jobs - Search</title>
+    <link rel="stylesheet" href="../shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="../index.html">Demo Jobs</a>
+      <nav aria-label="Primary">
+        <a href="../product-search/index.html">Store</a>
+        <a href="../article/index.html">Blog</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Job Search</h1>
+      <p class="lede">Fictional openings used to test SurfAI's saved-favourite workflow.</p>
+
+      <form class="search-bar" id="job-form" role="search">
+        <label for="job-query">Search jobs</label>
+        <input id="job-query" name="q" type="search" placeholder="Job title or skill" autocomplete="off" />
+        <button type="submit" id="job-search-button">Search jobs</button>
+      </form>
+
+      <div class="layout">
+        <aside class="filters" aria-label="Filters">
+          <h2>Filters</h2>
+
+          <div class="field">
+            <label for="location">Location</label>
+            <select id="location" name="location">
+              <option value="">Any location</option>
+              <option value="India">India</option>
+              <option value="Remote">Remote</option>
+              <option value="United States">United States</option>
+              <option value="Europe">Europe</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="experience">Experience</label>
+            <select id="experience" name="experience">
+              <option value="">Any experience</option>
+              <option value="0-2">0-2 years</option>
+              <option value="3-5">3-5 years</option>
+              <option value="6+">6+ years</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="job-type">Job type</label>
+            <select id="job-type" name="type">
+              <option value="">All types</option>
+              <option value="Full-time">Full-time</option>
+              <option value="Internship">Internship</option>
+              <option value="Contract">Contract</option>
+            </select>
+          </div>
+
+          <button type="button" id="apply-job-filters">Apply filters</button>
+        </aside>
+
+        <section class="results" aria-label="Job results">
+          <p class="result-count" id="job-count" role="status">Showing 0 jobs</p>
+          <div class="job-list" id="job-list"></div>
+          <nav class="pagination" aria-label="Pagination">
+            <button type="button" id="job-prev" disabled>Previous page</button>
+            <span id="job-page">Page 1</span>
+            <button type="button" id="job-next">Next page</button>
+          </nav>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>A static demo site for testing SurfAI. All roles and companies are invented.</p>
+    </footer>
+
+    <script src="jobs.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

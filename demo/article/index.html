@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo Blog - Understanding Semantic DOM Extraction</title>
+    <link rel="stylesheet" href="../shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="../index.html">Demo Blog</a>
+      <nav aria-label="Primary">
+        <a href="../product-search/index.html">Store</a>
+        <a href="../job-search/index.html">Jobs</a>
+        <a href="injection-test.html">Security test page</a>
+      </nav>
+    </header>
+
+    <main>
+      <article class="article">
+        <h1>Understanding Semantic DOM Extraction</h1>
+        <p class="byline">A structured article for testing content extraction and summarisation.</p>
+
+        <nav class="toc" aria-label="Table of contents">
+          <strong>Contents</strong>
+          <ul>
+            <li><a href="#problem">The problem with raw HTML</a></li>
+            <li><a href="#approach">A semantic approach</a></li>
+            <li><a href="#ids">Stable element identifiers</a></li>
+            <li><a href="#budget">Working within a context budget</a></li>
+            <li><a href="#results">Measured trade-offs</a></li>
+          </ul>
+        </nav>
+
+        <h2 id="problem">The problem with raw HTML</h2>
+        <p>
+          A typical e-commerce page ships several hundred kilobytes of markup. Most of it is
+          layout scaffolding, analytics hooks, inline styling and framework bookkeeping. Almost
+          none of it describes what a person can actually do on the page.
+        </p>
+        <p>
+          Feeding that markup to a language model is expensive and, more importantly,
+          ineffective. The signal a planner needs -- where the search box is, which control
+          filters by price, which links lead to results -- is buried under noise that actively
+          competes for the model's attention.
+        </p>
+
+        <blockquote>
+          The question is not how much of the page a model can read. It is how little it needs
+          to read in order to act correctly.
+        </blockquote>
+
+        <h2 id="approach">A semantic approach</h2>
+        <p>
+          A semantic extractor walks the document once and keeps only interactive and structural
+          elements: inputs, buttons, links, selects, headings and labels. Each is reduced to the
+          handful of facts that matter for acting on it -- its kind, its accessible name, whether
+          it is visible, and whether it is currently usable.
+        </p>
+        <p>
+          Accessible naming does most of the work. An element's <code>aria-label</code>, its
+          associated <code>&lt;label&gt;</code>, or its visible text is what a human would call
+          it, and therefore what a user's instruction will refer to.
+        </p>
+
+        <h3>What gets discarded</h3>
+        <p>
+          Styling, class names, data attributes, tracking pixels, and the entire text of
+          navigation and footer regions are dropped. So are elements that are present in the DOM
+          but invisible on screen, which an agent must never target.
+        </p>
+
+        <h2 id="ids">Stable element identifiers</h2>
+        <p>
+          Each retained element receives a short identifier such as <code>e12</code>, assigned in
+          document order and held in a map from identifier back to the live node. The model
+          references only these identifiers. It never writes a CSS selector, and never sees one.
+        </p>
+        <p>
+          This is a security property as much as an ergonomic one. An identifier can only name
+          something the extractor already decided was visible, enabled and interactive, so the
+          set of actions reachable by a compromised planner is bounded by what a user could have
+          clicked themselves.
+        </p>
+
+        <h2 id="budget">Working within a context budget</h2>
+        <p>
+          Dense pages exceed any reasonable budget, so elements are ranked before truncation.
+          Search inputs and submit buttons outrank decorative links; visible outranks hidden;
+          labelled outranks anonymous. The surviving set is then restored to document order, so
+          that positional phrasing in a user's request still lines up with the page.
+        </p>
+
+        <h2 id="results">Measured trade-offs</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Representation</th>
+              <th>Typical size</th>
+              <th>Contains layout noise</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Raw HTML</td>
+              <td>Hundreds of kilobytes</td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td>Stripped text</td>
+              <td>Tens of kilobytes</td>
+              <td>Partially</td>
+            </tr>
+            <tr>
+              <td>Semantic snapshot</td>
+              <td>A few kilobytes</td>
+              <td>No</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          The sizes above describe the shape of the trade-off, not a benchmark. Real figures
+          depend entirely on the page.
+        </p>
+
+        <h2>Further reading</h2>
+        <ul>
+          <li><a href="../product-search/index.html">Demo store with search and filters</a></li>
+          <li><a href="../job-search/index.html">Demo job board</a></li>
+          <li><a href="injection-test.html">Prompt injection test page</a></li>
+        </ul>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <p>A static demo article written to exercise SurfAI's extraction and summarisation.</p>
+    </footer>
+  </body>
+</html>

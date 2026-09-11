@@ -1,0 +1,369 @@
+/* Shared styling for the SurfAI demo sites. Plain, generic, and unremarkable
+   on purpose -- these pages exist to be read by an agent, not admired. */
+
+:root {
+  --ink: #1c1c1f;
+  --muted: #5d5d68;
+  --line: #dcdce2;
+  --surface: #ffffff;
+  --ground: #f6f6f8;
+  --link: #1a56c4;
+  --ok: #15803d;
+  --bad: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--ground);
+}
+
+a {
+  color: var(--link);
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.site-header nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+
+.lede {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+/* --- search --------------------------------------------------------- */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.search-bar label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.search-bar input[type='search'],
+.search-bar input[type='text'] {
+  flex: 1;
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+}
+
+button {
+  padding: 8px 14px;
+  border: 1px solid var(--link);
+  border-radius: 4px;
+  background: var(--link);
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- layout --------------------------------------------------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filters {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.filters h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.field select,
+.field input[type='text'],
+.field input[type='number'] {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  background: var(--surface);
+}
+
+.field.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field.checkbox label {
+  margin: 0;
+  font-weight: 400;
+}
+
+.filters button {
+  width: 100%;
+  margin-top: 6px;
+}
+
+/* --- results -------------------------------------------------------- */
+
+.result-count {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.product-grid,
+.job-list {
+  display: grid;
+  gap: 12px;
+}
+
+.product-grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+.product-card,
+.job-card {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.product-name,
+.job-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.product-price {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.product-specs,
+.job-meta {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.in-stock {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.out-of-stock {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bad);
+}
+
+.product-link,
+.job-link {
+  display: inline-block;
+  margin-right: 10px;
+  margin-bottom: 8px;
+}
+
+.buy-button,
+.apply-button {
+  display: block;
+  width: 100%;
+}
+
+.no-results {
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* --- article -------------------------------------------------------- */
+
+.article {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.article h2 {
+  margin-top: 28px;
+  font-size: 20px;
+}
+
+.article h3 {
+  margin-top: 20px;
+  font-size: 17px;
+}
+
+.article p {
+  margin: 0 0 14px;
+}
+
+.byline {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.toc {
+  padding: 14px 18px;
+  background: var(--ground);
+  border-left: 3px solid var(--link);
+  margin-bottom: 24px;
+}
+
+.toc ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+blockquote {
+  margin: 18px 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+}
+
+th,
+td {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: var(--ground);
+}
+
+/* --- footer --------------------------------------------------------- */
+
+.site-footer {
+  max-width: 1080px;
+  margin: 32px auto 0;
+  padding: 20px 24px 40px;
+  color: var(--muted);
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+
+/* A visible, consistent focus ring: these pages are keyboard-navigated too. */
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.notice {
+  padding: 12px 16px;
+  border: 1px solid #fde68a;
+  background: #fefce8;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}

@@ -1,0 +1,53 @@
+# --- Secrets ----------------------------------------------------------------
+# Never commit real configuration. `.env.example` is the committed template.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.db
+*.sqlite3
+
+# --- Node / extension -------------------------------------------------------
+node_modules/
+extension/dist/
+extension/.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Editors and OS ---------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local scratch ----------------------------------------------------------
+*.local
+tmp/
+.tmp/

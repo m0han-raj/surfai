@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo Store - Product Search</title>
+    <link rel="stylesheet" href="../shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="../index.html">Demo Store</a>
+      <nav aria-label="Primary">
+        <a href="../job-search/index.html">Jobs</a>
+        <a href="../article/index.html">Blog</a>
+        <button type="button" id="signin">Sign in</button>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Product Search</h1>
+      <p class="lede">Laptops, accessories and components. Prices in rupees.</p>
+
+      <form class="search-bar" id="search-form" role="search">
+        <label for="search-input">Search products</label>
+        <input
+          id="search-input"
+          name="q"
+          type="search"
+          placeholder="Search products"
+          autocomplete="off"
+        />
+        <button type="submit" id="search-button">Search</button>
+      </form>
+
+      <div class="layout">
+        <aside class="filters" aria-label="Filters">
+          <h2>Filters</h2>
+
+          <div class="field">
+            <label for="max-price">Maximum price</label>
+            <select id="max-price" name="max_price">
+              <option value="">Any price</option>
+              <option value="50000">Under 50,000</option>
+              <option value="80000">Under 80,000</option>
+              <option value="120000">Under 120,000</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="category">Category</label>
+            <select id="category" name="category">
+              <option value="">All categories</option>
+              <option value="laptop">Laptops</option>
+              <option value="accessory">Accessories</option>
+              <option value="component">Components</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="brand">Brand</label>
+            <select id="brand" name="brand">
+              <option value="">All brands</option>
+              <option value="Lenovo">Lenovo</option>
+              <option value="ASUS">ASUS</option>
+              <option value="HP">HP</option>
+              <option value="Acer">Acer</option>
+              <option value="Dell">Dell</option>
+            </select>
+          </div>
+
+          <div class="field checkbox">
+            <input id="in-stock" name="in_stock" type="checkbox" />
+            <label for="in-stock">In stock only</label>
+          </div>
+
+          <button type="button" id="apply-filters">Apply filters</button>
+          <button type="button" id="clear-filters" class="secondary">Clear filters</button>
+        </aside>
+
+        <section class="results" aria-label="Search results">
+          <p class="result-count" id="result-count" role="status">Showing 0 products</p>
+          <div class="product-grid" id="product-grid"></div>
+
+          <nav class="pagination" aria-label="Pagination">
+            <button type="button" id="prev-page" disabled>Previous page</button>
+            <span id="page-indicator">Page 1</span>
+            <button type="button" id="next-page">Next page</button>
+          </nav>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        A static demo site for testing SurfAI. No real products, no real prices, nothing is
+        ordered.
+      </p>
+    </footer>
+
+    <script src="products.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

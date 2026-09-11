@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SurfAI Demo Sites</title>
+    <link rel="stylesheet" href="shared/demo.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <span class="brand">SurfAI Demo Sites</span>
+    </header>
+
+    <main>
+      <h1>Demo sites</h1>
+      <p class="lede">
+        Three static sites for exercising SurfAI deterministically, without depending on any
+        real website staying the same.
+      </p>
+
+      <div class="job-list">
+        <article class="job-card">
+          <h3 class="job-title"><a href="product-search/index.html">Product Search</a></h3>
+          <p class="job-meta">Search input, price / category / brand filters, product cards, pagination.</p>
+          <p>Try: <em>Find RTX 4060 laptops under 80,000</em></p>
+        </article>
+
+        <article class="job-card">
+          <h3 class="job-title"><a href="job-search/index.html">Job Search</a></h3>
+          <p class="job-meta">Search, location and experience filters, job cards.</p>
+          <p>Try: <em>Save this as my AI jobs</em>, then later <em>Check my AI jobs</em></p>
+        </article>
+
+        <article class="job-card">
+          <h3 class="job-title"><a href="article/index.html">Article</a></h3>
+          <p class="job-meta">Headings, paragraphs, a table and links.</p>
+          <p>Try: <em>Summarise this article</em></p>
+        </article>
+
+        <article class="job-card">
+          <h3 class="job-title"><a href="article/injection-test.html">Prompt Injection Test</a></h3>
+          <p class="job-meta">A deliberately hostile page for verifying the security model.</p>
+          <p>Try: <em>Summarise this page</em> and confirm SurfAI refuses its instructions.</p>
+        </article>
+      </div>
+
+      <h2>Running these locally</h2>
+      <p>
+        From the repository root:
+      </p>
+      <pre><code>cd demo &amp;&amp; python -m http.server 5500</code></pre>
+      <p>Then open <a href="http://localhost:5500/">http://localhost:5500/</a>.</p>
+    </main>
+
+    <footer class="site-footer">
+      <p>All content on these pages is fictional. Nothing can be bought, applied to or sent.</p>
+    </footer>
+  </body>
+</html>

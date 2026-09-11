@@ -1,0 +1,21 @@
+/* Demo catalogue. Fictional products with plausible specs for agent testing. */
+window.DEMO_PRODUCTS = [
+  { id: 1,  name: 'Lenovo LOQ 15 RTX 4060',        brand: 'Lenovo', category: 'laptop',    price: 74990,  gpu: 'RTX 4060', ram: '16GB', stock: true  },
+  { id: 2,  name: 'ASUS TUF Gaming A15 RTX 4060',  brand: 'ASUS',   category: 'laptop',    price: 78500,  gpu: 'RTX 4060', ram: '16GB', stock: true  },
+  { id: 3,  name: 'HP Victus 16 RTX 4060',         brand: 'HP',     category: 'laptop',    price: 79990,  gpu: 'RTX 4060', ram: '16GB', stock: false },
+  { id: 4,  name: 'Acer Nitro V 15 RTX 4050',      brand: 'Acer',   category: 'laptop',    price: 62990,  gpu: 'RTX 4050', ram: '16GB', stock: true  },
+  { id: 5,  name: 'Lenovo IdeaPad Slim 3',         brand: 'Lenovo', category: 'laptop',    price: 44990,  gpu: 'Integrated', ram: '8GB', stock: true },
+  { id: 6,  name: 'ASUS ROG Strix G16 RTX 4070',   brand: 'ASUS',   category: 'laptop',    price: 129990, gpu: 'RTX 4070', ram: '16GB', stock: true  },
+  { id: 7,  name: 'Dell G15 RTX 4060',             brand: 'Dell',   category: 'laptop',    price: 82990,  gpu: 'RTX 4060', ram: '16GB', stock: true  },
+  { id: 8,  name: 'HP Pavilion 14',                brand: 'HP',     category: 'laptop',    price: 52990,  gpu: 'Integrated', ram: '8GB', stock: true },
+  { id: 9,  name: 'Acer Predator Helios RTX 4080', brand: 'Acer',   category: 'laptop',    price: 189990, gpu: 'RTX 4080', ram: '32GB', stock: false },
+  { id: 10, name: 'Dell Inspiron 15',              brand: 'Dell',   category: 'laptop',    price: 48990,  gpu: 'Integrated', ram: '16GB', stock: true },
+  { id: 11, name: 'Lenovo Legion Slim 5 RTX 4060', brand: 'Lenovo', category: 'laptop',    price: 94990,  gpu: 'RTX 4060', ram: '16GB', stock: true  },
+  { id: 12, name: 'ASUS Vivobook 15',              brand: 'ASUS',   category: 'laptop',    price: 39990,  gpu: 'Integrated', ram: '8GB', stock: true },
+  { id: 13, name: 'Logitech MX Master 3S Mouse',   brand: 'Logitech', category: 'accessory', price: 8995, gpu: '', ram: '', stock: true },
+  { id: 14, name: 'Keychron K2 Keyboard',          brand: 'Keychron', category: 'accessory', price: 7490, gpu: '', ram: '', stock: true },
+  { id: 15, name: 'Laptop Cooling Pad',            brand: 'Cooler',   category: 'accessory', price: 1999, gpu: '', ram: '', stock: true },
+  { id: 16, name: 'Samsung 980 Pro 1TB SSD',       brand: 'Samsung',  category: 'component', price: 9499, gpu: '', ram: '', stock: true },
+  { id: 17, name: 'Corsair Vengeance 16GB DDR5',   brand: 'Corsair',  category: 'component', price: 5299, gpu: '', ram: '16GB', stock: true },
+  { id: 18, name: 'NVIDIA RTX 4060 Ti GPU',        brand: 'NVIDIA',   category: 'component', price: 38990, gpu: 'RTX 4060 Ti', ram: '', stock: false },
+];
