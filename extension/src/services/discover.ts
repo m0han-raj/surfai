@@ -82,21 +82,46 @@ export async function ensureBackendUrl(
   candidates: readonly string[] = LOCAL_CANDIDATES,
 ): Promise<string> {
   const settings = await getSettings();
-  if (await hasSearchedForBackend()) return settings.backendUrl;
-
-  // Mark it first. If the probes throw, or the panel is closed mid-search, the
-  // worst outcome should be "kept the default", not a search that reruns on
-  // every open and overrides whatever the user configured in between.
-  await markBackendSearched();
-
-  if (settings.backendUrl !== DEFAULT_BACKEND_URL) {
-    // Already configured, by an earlier version or a managed policy.
+  if (await hasSearchedForBackend()) {
+    // One exception, for installs an earlier version left stuck. It recorded
+    // the search as done even when it found nothing, pinning the panel to the
+    // default address; since the default is a popular port, that often meant
+    // pinned to another application's server. Under the logic below the pair
+    // "search completed" and "still on the default" cannot occur, so finding
+    // it means the search never really produced an answer. Search again.
+    if (settings.backendUrl === DEFAULT_BACKEND_URL) {
+      return searchAndSave(candidates);
+    }
     return settings.backendUrl;
   }
 
-  const found = await discoverBackend(candidates);
-  if (found !== settings.backendUrl) {
-    await saveSettings({ backendUrl: found });
+  if (settings.backendUrl !== DEFAULT_BACKEND_URL) {
+    // Already configured, by hand, by an earlier version, or by policy. That
+    // is an answer, so the search is over.
+    await markBackendSearched();
+    return settings.backendUrl;
   }
+
+  return searchAndSave(candidates);
+}
+
+/** Probe, and record the result only if it is one. */
+async function searchAndSave(candidates: readonly string[]): Promise<string> {
+  const found = await discoverBackend(candidates);
+  if (found === DEFAULT_BACKEND_URL) {
+    // Found nothing. Deliberately not recorded as a completed search: the
+    // causes are usually temporary and invisible from here, such as a backend
+    // that has not started yet or host access for localhost being switched
+    // off in Chrome, and recording it would pin the panel to the default
+    // address for good. The default is a popular port, so "pinned to the
+    // default" often means pinned to somebody else's server.
+    //
+    // Repeating it on every request is prevented by the caller holding the
+    // in-flight promise for the session, not by this flag.
+    return found;
+  }
+
+  await saveSettings({ backendUrl: found });
+  await markBackendSearched();
   return found;
 }

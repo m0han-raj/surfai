@@ -105,10 +105,7 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  // Connecting says nothing about whether the migrations have run, and a
-  // deployment pointed at an empty database otherwise looks perfectly healthy
-  // right up until the first request fails.
-  const missingTables = health?.database.missing_tables ?? [];
+  const database = databaseStatusOf(health);
 
   return (
     <section className="section">
@@ -255,17 +252,7 @@ export default function SettingsPage() {
           ok={Boolean(health)}
           detail={health ? `${health.app} (${health.environment})` : 'Not reachable'}
         />
-        <StatusRow
-          label="Database"
-          ok={Boolean(health?.database.connected) && !missingTables.length}
-          detail={
-            !health?.database.connected
-              ? (health?.database.error ?? 'Not connected')
-              : missingTables.length
-                ? `Connected, but ${missingTables.length} table(s) are missing. Run the migrations.`
-                : 'Connected'
-          }
-        />
+        <StatusRow label="Database" ok={database.ok} detail={database.detail} />
         <StatusRow
           label="Language model"
           ok={Boolean(llm?.reachable)}
@@ -351,6 +338,38 @@ export default function SettingsPage() {
     </section>
   );
 }
+
+/**
+ * The database row, derived from a health response that may be anything.
+ *
+ * Every field is reached defensively. `health?.database.missing_tables` only
+ * guarded the arrival of a response, not its shape, and a server on the
+ * configured port that answered `{"status":"healthy"}` took the whole panel
+ * down with "Cannot read properties of undefined". `api.health()` now rejects
+ * a response that is not SurfAI's, which is the real fix; this stays tolerant
+ * for a genuine backend that predates a field.
+ *
+ * Connecting is also not the same as being migrated: a deployment pointed at
+ * an empty database looks perfectly healthy until the first request fails.
+ */
+export function databaseStatusOf(
+  health: HealthResponse | null,
+): { ok: boolean; detail: string } {
+  const database = health?.database;
+  if (!database?.connected) {
+    return { ok: false, detail: database?.error ?? 'Not connected' };
+  }
+
+  const missing = database.missing_tables ?? [];
+  if (missing.length) {
+    return {
+      ok: false,
+      detail: `Connected, but ${missing.length} table(s) are missing. Run the migrations.`,
+    };
+  }
+  return { ok: true, detail: 'Connected' };
+}
+
 
 function StatusRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (

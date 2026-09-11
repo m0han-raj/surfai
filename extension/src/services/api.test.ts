@@ -96,6 +96,31 @@ describe('request failures', () => {
     await expect(api.health()).rejects.toBeInstanceOf(ApiError);
   });
 
+  it('refuses a /health answer that is not from SurfAI', async () => {
+    // This is what crashed the panel. Another application on the configured
+    // port answered `{"status":"healthy"}`, the panel took it for its own
+    // backend, and reading `health.database.missing_tables` threw
+    // "Cannot read properties of undefined". The shape is not ours, so the
+    // fix is to refuse it here rather than to guard every field that reads it.
+    respondWith({ status: 200, body: { status: 'healthy' } });
+
+    await expect(api.health()).rejects.toThrow(/not a SurfAI backend|not SurfAI/i);
+  });
+
+  it('names the address when the wrong application answers', async () => {
+    respondWith({ status: 200, body: { status: 'healthy' } });
+
+    await expect(api.health()).rejects.toThrow(/http:\/\/localhost:8000/);
+  });
+
+  it('reports that as a reachability problem, not a crash', async () => {
+    respondWith({ status: 200, body: { status: 'healthy' } });
+
+    // The Settings panel renders a reachable/unreachable row from this; the
+    // wrong application on the port belongs in the unreachable column.
+    await expect(api.health()).rejects.toMatchObject({ isNetwork: true });
+  });
+
   it('still succeeds when the backend is healthy', async () => {
     respondWith({ status: 200, body: { status: 'ok', app: 'SurfAI' } });
 

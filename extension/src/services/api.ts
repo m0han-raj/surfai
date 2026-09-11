@@ -189,7 +189,24 @@ export interface LlmHealthResponse {
 }
 
 export const api = {
-  health: () => request<HealthResponse>('/health', { method: 'GET', timeoutMs: 5000 }),
+  health: async () => {
+    const body = await request<HealthResponse>('/health', { method: 'GET', timeoutMs: 5000 });
+    // Port collisions are the normal case, not an exotic one, and plenty of
+    // servers answer `/health` with a 200. Taking one of those for our own
+    // backend is what crashed the panel: every field below `database` came
+    // back undefined and the first read of one threw. Checking the identity
+    // here beats guarding each of its readers, and it is the same check
+    // discovery already applies before adopting an address.
+    if (body?.app !== 'SurfAI') {
+      throw new ApiError(
+        `Something is answering at ${await baseUrl()}, but it is not a SurfAI backend. ` +
+          'Another application is probably using that port. Check the address in Settings.',
+        0,
+        true,
+      );
+    }
+    return body;
+  },
 
   llmHealth: () => request<LlmHealthResponse>('/health/llm', { method: 'GET', timeoutMs: 15000 }),
 
