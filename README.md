@@ -218,6 +218,19 @@ explain the shape of the configuration:
 **`maxDuration` is 60s.** One agent step has to finish inside it, which is fine
 for a hosted model and not for a slow local one.
 
+A deployment from the CLI inside a Git working tree sends the repository's
+commit metadata, and Vercel blocks it if the deploying account cannot verify
+access to that repository. Deploying from a clean export of the tracked files
+avoids it:
+
+```bash
+git archive HEAD | tar -x -C /tmp/surfai-deploy
+cd /tmp/surfai-deploy && vercel deploy --prod
+```
+
+Importing the repository in the dashboard is the better long-term answer, since
+Vercel then builds from Git itself and no metadata mismatch arises.
+
 ### 3. Verify before trusting it
 
 ```bash
@@ -227,6 +240,10 @@ curl -i https://your-app.vercel.app/api/favourites    # must be 401
 
 **A 200 on that second one means you deployed in local mode and the instance is
 open to anyone.** Fix it before going further.
+
+Vercel Authentication (deployment protection) is on by default and intercepts
+every request with a 302, including the extension's. Turn it off for the
+project: the backend's own Google auth is what protects the data.
 
 To run it privately, set `ALLOWED_EMAILS` to a comma-separated list. It is
 enforced after the token verifies, so it is a real check.
