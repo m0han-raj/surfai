@@ -35,8 +35,11 @@ export function getTabContext(): Promise<MessageResponse<TabContext>> {
 }
 
 /** Capture a semantic snapshot of the active tab. */
-export function capturePage(maxElements?: number): Promise<MessageResponse<SemanticPage>> {
-  return send<SemanticPage>({ type: 'CAPTURE_PAGE', maxElements });
+export function capturePage(
+  maxElements?: number,
+  maxTextChars?: number,
+): Promise<MessageResponse<SemanticPage>> {
+  return send<SemanticPage>({ type: 'CAPTURE_PAGE', maxElements, maxTextChars });
 }
 
 /** Execute one validated action in the active tab. */

@@ -46,7 +46,7 @@ export interface RunnerCallbacks {
 const EMPTY_PAGE: Partial<SemanticPage> = { elements: [], summary: '', truncated: 0 };
 
 /** A page snapshot plus the tab identity it came from. */
-async function observe(maxElements?: number): Promise<{
+async function observe(maxElements?: number, maxTextChars?: number): Promise<{
   page: Record<string, unknown>;
   tab: TabContext;
   warning?: string;
@@ -54,7 +54,7 @@ async function observe(maxElements?: number): Promise<{
   const tabResponse = await getTabContext();
   const tab: TabContext = tabResponse.data ?? { url: '', title: '' };
 
-  const pageResponse = await capturePage(maxElements);
+  const pageResponse = await capturePage(maxElements, maxTextChars);
   if (!pageResponse.ok || !pageResponse.data) {
     // Still return the tab identity: the agent can say what it cannot see
     // rather than failing with no explanation.
@@ -75,7 +75,20 @@ export class AgentRunner {
 
   constructor(
     private readonly callbacks: RunnerCallbacks,
-    private readonly options: { maxElements?: number; actionTimeoutMs?: number } = {},
+    /**
+     * `maxTextChars` is what the model is given when a question is asked, and
+     * `stepTextChars` what it is given between agent steps. They differ by an
+     * order of magnitude on purpose: a question is one request and can afford
+     * the page, while a task re-reads it every step, up to fifteen times, and
+     * needs controls rather than prose. Sending the generous budget on both
+     * paths exhausts a per-minute token quota inside a single task.
+     */
+    private readonly options: {
+      maxElements?: number;
+      maxTextChars?: number;
+      stepTextChars?: number;
+      actionTimeoutMs?: number;
+    } = {},
   ) {}
 
   get isRunning(): boolean {
@@ -119,7 +132,10 @@ export class AgentRunner {
     this.taskId = null;
 
     try {
-      const { page, tab, warning } = await observe(this.options.maxElements);
+      const { page, tab, warning } = await observe(
+        this.options.maxElements,
+        this.options.maxTextChars,
+      );
       if (warning) this.callbacks.onActivity(warning, 'info');
 
       const directive = await api.chat({
@@ -157,7 +173,7 @@ export class AgentRunner {
         await waitForTabLoad();
       }
 
-      const { page, tab } = await observe(this.options.maxElements);
+      const { page, tab } = await observe(this.options.maxElements, this.options.maxTextChars);
       const directive = await api.createTask({
         request,
         page_context: page,
@@ -204,7 +220,7 @@ export class AgentRunner {
         const approved = await this.callbacks.onConfirmationRequired(directive);
         if (this.cancelled) break;
 
-        const { page } = await observe(this.options.maxElements);
+        const { page } = await observe(this.options.maxElements, this.options.stepTextChars);
         directive = await api.continueTask(this.taskId!, {
           page_context: page,
           confirmation: approved,
@@ -222,7 +238,7 @@ export class AgentRunner {
         if (result.url_changed) {
           await waitForTabLoad(10_000);
         }
-        const { page } = await observe(this.options.maxElements);
+        const { page } = await observe(this.options.maxElements, this.options.stepTextChars);
         if (this.cancelled) break;
 
         directive = await api.continueTask(this.taskId!, {

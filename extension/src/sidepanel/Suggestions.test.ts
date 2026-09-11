@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { suggestionsFor } from './components/Suggestions';
+import { readinessFor, suggestionsFor } from './components/Suggestions';
 import type { PageInsight } from './usePageContext';
 
 function insight(overrides: Partial<PageInsight> = {}): PageInsight {
@@ -61,5 +61,42 @@ describe('suggestionsFor', () => {
   it('returns distinct prompts', () => {
     const prompts = suggestionsFor(insight({ capabilities: { search: true, results: true } }));
     expect(new Set(prompts).size).toBe(prompts.length);
+  });
+});
+
+describe('readinessFor', () => {
+  // Opening the panel should answer "does it know where I am?" without the
+  // user having to ask a question to find out.
+
+  it('names the page it has read', () => {
+    const state = readinessFor(
+      insight({ domain: 'cooking.example.com', title: 'Classic Carbonara Recipe' }),
+    );
+    expect(state.title).toContain('Classic Carbonara Recipe');
+    expect(state.ready).toBe(true);
+  });
+
+  it('falls back to the domain when a page has no title', () => {
+    const state = readinessFor(insight({ title: '', domain: 'cooking.example.com' }));
+    expect(state.title).toContain('cooking.example.com');
+  });
+
+  it('says how much of the page it actually took in', () => {
+    // "I read the page" is a claim; the element count is the evidence, and it
+    // is also the honest signal when a page turns out to be nearly empty.
+    const state = readinessFor(insight({ elementCount: 24 }));
+    expect(state.subtitle).toMatch(/24/);
+  });
+
+  it('is honest when there is no page to read', () => {
+    const state = readinessFor(null);
+    expect(state.ready).toBe(false);
+    expect(state.title).not.toMatch(/I have read|I've read/i);
+  });
+
+  it('leads with the warning on a page that tried prompt injection', () => {
+    // More important than anything else the chip could say about it.
+    const state = readinessFor(insight({ suspicious: true }));
+    expect(state.subtitle).toMatch(/instructions/i);
   });
 });

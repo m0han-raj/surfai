@@ -34,7 +34,14 @@ export function useAgent() {
   const [pendingConfirmation, setPendingConfirmation] = useState<Directive | null>(null);
 
   const confirmResolver = useRef<((approved: boolean) => void) | null>(null);
-  const optionsRef = useRef({ maxElements: 60, actionTimeoutMs: 10_000 });
+  const optionsRef = useRef({
+    maxElements: 60,
+    maxTextChars: 12_000,
+    // Agent steps stay lean: the loop re-reads the page every step and needs
+    // the controls, not the prose.
+    stepTextChars: 1_500,
+    actionTimeoutMs: 10_000,
+  });
   /** Id of the assistant placeholder currently collecting steps. */
   const pendingIdRef = useRef<string | null>(null);
   /** The page this conversation is currently about: where the last turn was sent. */
@@ -43,7 +50,9 @@ export function useAgent() {
   useEffect(() => {
     void getSettings().then((settings) => {
       optionsRef.current = {
+        ...optionsRef.current,
         maxElements: settings.maxElements,
+        maxTextChars: settings.maxTextChars,
         actionTimeoutMs: settings.actionTimeoutMs,
       };
     });

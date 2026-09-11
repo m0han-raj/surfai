@@ -23,6 +23,7 @@ export interface PingMessage {
 export interface CapturePageMessage {
   type: 'CAPTURE_PAGE';
   maxElements?: number;
+  maxTextChars?: number;
 }
 
 export interface ExecuteActionMessage {

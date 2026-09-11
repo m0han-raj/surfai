@@ -36,6 +36,7 @@ function handleMessage(
         .then(() => {
           const page = capturePage({
             maxElements: message.maxElements ?? DEFAULT_MAX_ELEMENTS,
+            maxTextChars: message.maxTextChars,
           });
           sendResponse({ ok: true, data: page });
         })

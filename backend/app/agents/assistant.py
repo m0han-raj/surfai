@@ -31,12 +31,29 @@ logger = logging.getLogger(__name__)
 
 # Phrases that point at whatever the user is currently looking at. A question
 # containing one of these needs the page; "explain recursion" does not.
+# An unambiguous reference to what the user is looking at. Nothing overrides
+# these: whatever else the sentence is doing, it has named the page.
+_NAMES_THE_PAGE = re.compile(
+    r"\b("
+    r"th(is|e|at) (page|site|article|post|website|document|tab)|"
+    r"on (this|the) (page|site|screen)|on screen|on-screen|"
+    r"what am i|where am i|"
+    r"summar(y|ise|ize) (this|the page|it)|explain this|what does this|"
+    r"who wrote|the author|"
+    r"(listed|shown|displayed|mentioned|visible) (on|here|above|below)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Weaker signals. Real often enough to be worth acting on, but words this
+# common are not evidence on their own, which is why a general-knowledge
+# opener is allowed to overrule them.
 _REFERS_TO_PAGE = re.compile(
     r"\b("
-    r"this|these|those|here|it|current|the page|the site|the article|this one|"
-    r"above|below|on screen|on-screen|what am i|where am i|"
-    r"summar(y|ise|ize)|tldr|tl;dr|explain this|what does this|who wrote|"
-    r"the author|the price|listed|shown|displayed|visible"
+    r"this|these|those|here|it|current|this one|"
+    r"above|below|"
+    r"summar(y|ise|ize)|tldr|tl;dr|"
+    r"the price|listed|shown|displayed|visible"
     r")\b",
     re.IGNORECASE,
 )
@@ -44,8 +61,9 @@ _REFERS_TO_PAGE = re.compile(
 # Questions that are explicitly about general knowledge never need the page,
 # even when they happen to contain a word like "it".
 _CLEARLY_GENERAL = re.compile(
-    r"^\s*(write|compose|draft|translate|define|what is a|what are|who is|"
-    r"how do i|how does a|explain the concept|tell me about|give me an example)\b",
+    r"^\s*(write|compose|draft|translate|define|what is a|what is it|what are|"
+    r"who is|how do i|how does a|explain the concept|tell me about|"
+    r"give me an example)\b",
     re.IGNORECASE,
 )
 
@@ -69,13 +87,25 @@ class AssistantReply:
 def needs_page_context(message: str) -> bool:
     """Does answering this question require looking at the current page?
 
-    Deliberately cheap and conservative. A false positive costs a few hundred
-    tokens of context; a false negative means answering "summarise this" without
-    having read "this".
+    Conservative, but no longer free in either direction. A false negative
+    still means answering "summarise this" without having read "this". A false
+    positive used to cost a few hundred tokens and now costs several thousand,
+    since the page excerpt was raised from two hundred words to something worth
+    answering from, which is a real fraction of a per-minute token budget.
     """
-    if _CLEARLY_GENERAL.match(message or ""):
+    text = message or ""
+
+    # Order matters here, and having it backwards is how "what are the common
+    # mistakes this page mentions?" came back as "I'm not seeing any page
+    # content", about a page that was open at the time. A sentence that names
+    # the page has already settled the question; the opener list below only
+    # ever existed to adjudicate the ambiguous words, not to overrule a plain
+    # statement of what the user is asking about.
+    if _NAMES_THE_PAGE.search(text):
+        return True
+    if _CLEARLY_GENERAL.match(text):
         return False
-    return bool(_REFERS_TO_PAGE.search(message or ""))
+    return bool(_REFERS_TO_PAGE.search(text))
 
 
 class Assistant:

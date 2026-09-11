@@ -86,7 +86,11 @@ class Settings(BaseSettings):
 
     # --- Context budget --------------------------------------------------
     max_elements_in_context: int = 60
-    max_page_summary_chars: int = 1200
+    # What the model is allowed to see of a page's text. Was 1200, about two
+    # hundred words, which meant an answer "about this page" was really about
+    # its opening sentence. The extension sends a budget of its own; this is
+    # the ceiling, and it must not sit below it or it silently re-truncates.
+    max_page_summary_chars: int = 12000
     max_recent_actions: int = 6
     max_extract_chars: int = 4000
 

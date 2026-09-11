@@ -237,3 +237,54 @@ def test_chat_rejects_a_forged_history_role(client, fake_llm) -> None:
         },
     )
     assert response.status_code == 422
+
+
+# --- an explicit page reference outranks a general-sounding opener ---------
+
+
+def test_a_question_naming_the_page_always_reads_the_page() -> None:
+    """The bug: "what are" won over "this page" and the page was never sent.
+
+    `_CLEARLY_GENERAL` exists so that "what is a closure" does not drag a
+    webpage into the prompt. But it was consulted first, so any question that
+    happened to start with one of its openers was ruled general no matter what
+    followed. Asking "what are the common mistakes this page mentions?" got the
+    answer "I'm not seeing any page content", about a page that was open.
+    """
+    for message in (
+        "what are the common mistakes this page mentions?",
+        "what are the ingredients listed on this page",
+        "how do i do what the article says",
+        "tell me about this site",
+        "explain the concept shown on screen",
+        "write a summary of this page",
+    ):
+        assert needs_page_context(message) is True, message
+
+
+def test_genuinely_general_questions_still_skip_the_page() -> None:
+    """The protection the opener list was there for, kept intact."""
+    for message in (
+        "what is a closure in javascript",
+        "who is the president of france",
+        "write me a haiku about rain",
+        "translate good morning into spanish",
+        "how do i reverse a list in python",
+        "define entropy",
+    ):
+        assert needs_page_context(message) is False, message
+
+
+def test_a_weak_reference_still_yields_to_a_general_opener() -> None:
+    """"it" and "this" are too common to count as naming the page.
+
+    This is exactly the ambiguity the opener list was added for, and it keeps
+    winning here: the words alone are not evidence the user means the page.
+    """
+    assert needs_page_context("what is it called when a function returns a function") is False
+    assert needs_page_context("how do i center this in css") is False
+
+
+def test_a_bare_page_reference_needs_no_help() -> None:
+    for message in ("summarise this", "what am i looking at", "what is on this page"):
+        assert needs_page_context(message) is True, message

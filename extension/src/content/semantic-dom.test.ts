@@ -281,3 +281,81 @@ describe('extractSummary', () => {
     expect(extractSummary(document, 500).length).toBeLessThanOrEqual(500);
   });
 });
+
+describe('extractSummary keeps the shape of the page', () => {
+  // The text used to be joined with single spaces, which turned an article
+  // into one undifferentiated blob. Structure is most of what makes an
+  // excerpt answerable: the same token count says far more when the model can
+  // see which line was a heading and where one paragraph ended.
+  beforeEach(() => {
+    stubLayout();
+  });
+
+  it('keeps headings recognisable as headings', () => {
+    document.body.innerHTML = `
+      <main>
+        <h1>Carbonara</h1>
+        <p>A Roman pasta dish.</p>
+        <h2>Ingredients</h2>
+        <p>Guanciale, pecorino, eggs.</p>
+      </main>`;
+
+    const text = extractSummary();
+    expect(text).toMatch(/^#+ Carbonara$/m);
+    expect(text).toMatch(/^#+ Ingredients$/m);
+  });
+
+  it('keeps paragraphs apart', () => {
+    document.body.innerHTML = `
+      <main><p>First paragraph.</p><p>Second paragraph.</p></main>`;
+
+    const text = extractSummary();
+    expect(text).not.toContain('First paragraph. Second paragraph.');
+    expect(text.split('\n').filter(Boolean)).toHaveLength(2);
+  });
+
+  it('keeps list items as a list', () => {
+    document.body.innerHTML = `
+      <main><ul><li>Guanciale</li><li>Pecorino</li></ul></main>`;
+
+    const text = extractSummary();
+    expect(text).toMatch(/^- Guanciale$/m);
+    expect(text).toMatch(/^- Pecorino$/m);
+  });
+
+  it('does not split a sentence that merely contains inline markup', () => {
+    // <em> and <a> are not block boundaries; breaking on them would shred
+    // ordinary prose into fragments.
+    document.body.innerHTML =
+      '<main><p>The <em>best</em> pasta in <a href="/rome">Rome</a>.</p></main>';
+
+    expect(extractSummary().trim()).toBe('The best pasta in Rome.');
+  });
+
+  it('still refuses page chrome and scripts', () => {
+    document.body.innerHTML = `
+      <nav>Navigation links here</nav>
+      <main><script>var secret = "no";</script><p>Body.</p></main>
+      <footer>Copyright</footer>`;
+
+    const text = extractSummary();
+    expect(text).toContain('Body.');
+    expect(text).not.toContain('Navigation links here');
+    expect(text).not.toContain('secret');
+  });
+
+  it('stops cleanly at the budget rather than mid-word', () => {
+    document.body.innerHTML = `<main>${'<p>Sentence here.</p>'.repeat(400)}</main>`;
+
+    const text = extractSummary(document, 300);
+    expect(text.length).toBeLessThanOrEqual(300);
+    // Truncation lands on a boundary we chose, not wherever the count ran out.
+    expect(text.endsWith('Sentence here.')).toBe(true);
+  });
+
+  it('reads a long page far past the old 1200-character ceiling', () => {
+    document.body.innerHTML = `<main>${'<p>Sentence here.</p>'.repeat(2000)}</main>`;
+
+    expect(extractSummary(document, 12_000).length).toBeGreaterThan(10_000);
+  });
+});

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../services/api';
 import { capturePage, getTabContext, onTabChanged } from '../services/messaging';
+import { getSettings } from '../services/storage';
 import type { TabContext } from '../types/messages';
 
 export interface PageInsight {
@@ -49,7 +50,10 @@ export function usePageContext() {
       return;
     }
 
-    const pageResponse = await capturePage();
+    // The same budget the chat uses, so what the header reports and what a
+    // question is answered from are the same reading of the page.
+    const settings = await getSettings();
+    const pageResponse = await capturePage(settings.maxElements, settings.maxTextChars);
     if (id !== requestId.current) return;
 
     if (!pageResponse.ok || !pageResponse.data) {

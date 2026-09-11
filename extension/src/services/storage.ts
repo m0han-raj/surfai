@@ -12,6 +12,14 @@ export interface SurfAISettings {
   backendUrl: string;
   /** Cap on elements captured per snapshot; lower is cheaper and faster. */
   maxElements: number;
+  /**
+   * How much of a page's text SurfAI reads when you ask about it.
+   *
+   * The difference between answering about a page and answering about its
+   * buttons. Higher is better until it meets the model provider's per-minute
+   * token limit, which is why it is a setting and not a constant.
+   */
+  maxTextChars: number;
   actionTimeoutMs: number;
   /** Auto-run low-risk actions. Medium and high always confirm regardless. */
   autoRunLowRisk: boolean;
@@ -21,6 +29,7 @@ export interface SurfAISettings {
 export const DEFAULT_SETTINGS: SurfAISettings = {
   backendUrl: DEFAULT_BACKEND_URL,
   maxElements: 60,
+  maxTextChars: 12_000,
   actionTimeoutMs: 10_000,
   autoRunLowRisk: true,
   theme: 'light',

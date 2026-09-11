@@ -178,6 +178,30 @@ export default function SettingsPage() {
         </div>
 
         <div className="field">
+          <label className="field__label" htmlFor="max-text">
+            Page text read per question: {(settings.maxTextChars / 1000).toFixed(0)}k characters
+          </label>
+          <input
+            id="max-text"
+            className="input"
+            type="range"
+            min={1000}
+            max={30000}
+            step={1000}
+            value={settings.maxTextChars}
+            onChange={(event) =>
+              setSettings({ ...settings, maxTextChars: Number(event.target.value) })
+            }
+          />
+          <p className="field__hint">
+            How much of a page SurfAI reads before answering about it. More means better
+            answers on long pages, and more tokens per question. If your model provider
+            rate-limits you, this is the first thing to lower. Agent steps always use a small
+            budget, since they re-read the page many times per task.
+          </p>
+        </div>
+
+        <div className="field">
           <label className="field__label" htmlFor="action-timeout">
             Action timeout (ms)
           </label>

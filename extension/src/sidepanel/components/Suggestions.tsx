@@ -36,15 +36,49 @@ export function suggestionsFor(insight: PageInsight | null): string[] {
   return picks.slice(0, 3);
 }
 
+export interface Readiness {
+  ready: boolean;
+  title: string;
+  subtitle: string;
+}
+
+/**
+ * What the panel says before you have asked anything.
+ *
+ * It used to open with "How can I help?", which is friendly and tells you
+ * nothing. The question actually on your mind when you open a side panel is
+ * whether it can see the page you are looking at, and the honest answer varies:
+ * a chrome:// tab cannot be read at all, and a page that tried to smuggle
+ * instructions is worth knowing about before you trust an answer about it.
+ * Naming what it read, and how much of it, lets you judge the answers.
+ */
+export function readinessFor(insight: PageInsight | null): Readiness {
+  if (!insight) {
+    return {
+      ready: false,
+      title: 'How can I help?',
+      subtitle:
+        'I cannot read this page, so ask me anything else. Open a website and I will read it.',
+    };
+  }
+
+  const name = insight.title || insight.domain || 'this page';
+  const subtitle = insight.suspicious
+    ? 'Careful: this page tried to give me instructions. I ignored them, but treat what ' +
+      'it says with suspicion.'
+    : `${insight.elementCount} things on it I can see and act on. Ask me about it.`;
+
+  return { ready: true, title: `I have read ${name}`, subtitle };
+}
+
 export default function Suggestions({ insight, onPick }: SuggestionsProps) {
   const prompts = suggestionsFor(insight);
+  const readiness = readinessFor(insight);
 
   return (
     <div className="welcome">
-      <p className="welcome__title">How can I help?</p>
-      <p className="welcome__sub">
-        Ask me anything, or about the page you are on. I can act on it when you ask.
-      </p>
+      <p className="welcome__title">{readiness.title}</p>
+      <p className="welcome__sub">{readiness.subtitle}</p>
 
       <ul className="welcome__list">
         {prompts.map((prompt) => (

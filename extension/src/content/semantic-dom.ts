@@ -25,6 +25,13 @@ import {
 
 /** Budget for how many elements a single snapshot may carry. */
 export const DEFAULT_MAX_ELEMENTS = 60;
+/**
+ * Default text budget.
+ *
+ * Was 1200, about two hundred words: the opening of an article and nothing
+ * else, which is why answers about a page read as though SurfAI had not seen
+ * it. Callers override this; the default is the conservative one.
+ */
 const MAX_SUMMARY_CHARS = 1200;
 
 /** Tags whose text is never page content. */
@@ -47,6 +54,16 @@ let snapshotCounter = 0;
 
 export interface SnapshotOptions {
   maxElements?: number;
+  /**
+   * How much of the page's readable text to carry.
+   *
+   * The lever that decides whether SurfAI can answer about a page or only
+   * about its buttons. Budgeted rather than fixed because the two callers
+   * differ by an order of magnitude: a question is one request and can afford
+   * a lot, while an agent step re-reads the page up to fifteen times a task
+   * and needs controls, not prose.
+   */
+  maxTextChars?: number;
   /** Include headings and labels, not only interactive controls. */
   includeStructure?: boolean;
   root?: ParentNode;
@@ -121,7 +138,43 @@ function priority(element: SemanticElement): number {
   return score;
 }
 
-/** Extract the page's main readable text, skipping chrome and navigation. */
+/** Block elements whose text is a unit: a paragraph, a heading, a row. */
+const BLOCK_TAGS = new Set([
+  'P', 'DIV', 'SECTION', 'ARTICLE', 'MAIN', 'ASIDE', 'HEADER', 'FOOTER',
+  'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'TR', 'TD', 'TH',
+  'BLOCKQUOTE', 'PRE', 'FIGCAPTION', 'DD', 'DT', 'SUMMARY',
+]);
+
+/** How a block should be introduced, so its role survives the flattening. */
+function prefixFor(tag: string): string {
+  if (/^H[1-6]$/.test(tag)) return "#".repeat(Number(tag[1])) + " ";
+  if (tag === 'LI') return '- ';
+  return '';
+}
+
+/** The nearest ancestor that owns this text as a block of its own. */
+function blockOf(node: Node, root: Node): Element | null {
+  let current = node.parentElement;
+  while (current && current !== root.parentElement) {
+    if (BLOCK_TAGS.has(current.tagName)) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Extract the page's main readable text, skipping chrome and navigation.
+ *
+ * Keeps the shape of what it reads. An earlier version joined every text node
+ * with a single space, which turned an article into one undifferentiated run
+ * of words: the model could not tell a heading from a sentence, or where one
+ * paragraph ended and the next began. Structure is most of what makes an
+ * excerpt answerable, and it is nearly free, so headings arrive as headings
+ * and list items as list items.
+ *
+ * Inline markup is not a boundary. Breaking on `<em>` or `<a>` would shred
+ * ordinary prose into fragments, so text is grouped by the block that owns it.
+ */
 export function extractSummary(root: ParentNode = document, maxChars = MAX_SUMMARY_CHARS): string {
   const main =
     (root as Document).querySelector?.('main, [role="main"], article, #main, #content') ??
@@ -141,19 +194,39 @@ export function extractSummary(root: ParentNode = document, maxChars = MAX_SUMMA
     },
   });
 
-  const parts: string[] = [];
+  const lines: string[] = [];
+  let currentBlock: Element | null = null;
+  let buffer: string[] = [];
   let total = 0;
+
+  const flush = () => {
+    // Joined raw, then collapsed once. Trimming each fragment first would
+    // invent a space the document never had, turning "<a>Rome</a>." into
+    // "Rome ."; the DOM's own whitespace is the only thing that knows.
+    const text = buffer.join('').replace(/\s+/g, ' ').trim();
+    buffer = [];
+    if (text.length <= 1) return;
+    const line = prefixFor(currentBlock?.tagName ?? '') + text;
+    // Stop on a block boundary rather than mid-sentence: a fragment of a
+    // paragraph reads as though the page said something it did not.
+    if (total + line.length + 1 > maxChars) return;
+    lines.push(line);
+    total += line.length + 1;
+  };
+
   let node = walker.nextNode();
   while (node && total < maxChars) {
-    const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
-    if (text.length > 1) {
-      parts.push(text);
-      total += text.length + 1;
+    const block = blockOf(node, source);
+    if (block !== currentBlock) {
+      flush();
+      currentBlock = block;
     }
+    buffer.push(node.textContent || '');
     node = walker.nextNode();
   }
+  flush();
 
-  return parts.join(' ').slice(0, maxChars);
+  return lines.join('\n');
 }
 
 /**
@@ -164,6 +237,7 @@ export function extractSummary(root: ParentNode = document, maxChars = MAX_SUMMA
 export function capturePage(options: SnapshotOptions = {}): SemanticPage {
   const {
     maxElements = DEFAULT_MAX_ELEMENTS,
+    maxTextChars = MAX_SUMMARY_CHARS,
     includeStructure = true,
     root = document,
   } = options;
@@ -231,7 +305,7 @@ export function capturePage(options: SnapshotOptions = {}): SemanticPage {
     url: window.location.href,
     domain: window.location.hostname.toLowerCase(),
     title: document.title || visibleText(document.querySelector('h1') ?? document.body, 80),
-    summary: extractSummary(root),
+    summary: extractSummary(root, maxTextChars),
     elements,
     truncated: Math.max(0, candidates.length - elements.length),
     capturedAt: Date.now(),
