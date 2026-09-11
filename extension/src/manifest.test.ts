@@ -42,10 +42,11 @@ describe('extension manifest', () => {
     expect(serialised).not.toContain('https://*/*');
   });
 
-  it('grants host access to the local backend only', () => {
+  it('grants host access only to localhost and the one known backend', () => {
     expect(manifest.host_permissions).toEqual([
       'http://localhost/*',
       'http://127.0.0.1/*',
+      'https://surfai-iota.vercel.app/*',
     ]);
   });
 
@@ -56,6 +57,33 @@ describe('extension manifest', () => {
     expect(csp).toContain('http://localhost:*');
     expect(csp).toContain('http://127.0.0.1:*');
     expect(csp).not.toMatch(/localhost:\d+/);
+  });
+
+  it('can reach the hosted backend', () => {
+    // MV3 blocks any origin absent from connect-src, with no visible error, so
+    // a backend address the user sets in Settings is unreachable unless it is
+    // named here. Adding a host is therefore a deliberate manifest change.
+    const csp = manifest.content_security_policy.extension_pages;
+    expect(csp).toContain('https://surfai-iota.vercel.app');
+
+    const permitted = manifest.host_permissions.join(' ');
+    expect(permitted).toContain('surfai-iota.vercel.app');
+  });
+
+  it('does not open connect-src to arbitrary origins', () => {
+    const csp = manifest.content_security_policy.extension_pages;
+    expect(csp).not.toContain('https://*');
+    expect(csp).not.toContain('*.vercel.app');
+  });
+
+  it('declares an OAuth client with the narrowest useful scopes', () => {
+    // Identity comes from the token's subject; email is for display and the
+    // optional allowlist. Anything more means a scarier consent screen.
+    const oauth = (manifest as unknown as { oauth2?: { client_id: string; scopes: string[] } })
+      .oauth2;
+    expect(oauth?.client_id).toMatch(/\.apps\.googleusercontent\.com$/);
+    expect(oauth?.client_id).not.toContain('placeholder');
+    expect(oauth?.scopes.sort()).toEqual(['email', 'openid']);
   });
 
   it('keeps a restrictive script policy', () => {

@@ -4,32 +4,42 @@
   "version": "0.1.0",
   "description": "A personal AI assistant that understands, acts on, and remembers how you use the web.",
   "minimum_chrome_version": "116",
-
-  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
-
-  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
-
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "scripting",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://surfai-iota.vercel.app/*"
+  ],
+  "oauth2": {
+    "client_id": "378322140675-k1munob8nosfrbunat62dmthfko558hf.apps.googleusercontent.com",
+    "scopes": [
+      "openid",
+      "email"
+    ]
+  },
   "background": {
     "service_worker": "service-worker.js",
     "type": "module"
   },
-
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-
   "action": {
     "default_title": "Open SurfAI"
   },
-
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:* https://surfai-iota.vercel.app"
   }
 }
