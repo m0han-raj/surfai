@@ -81,7 +81,8 @@ async function request<T>(
   options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
   const { timeoutMs = 180_000, ...init } = options;
-  const url = `${await baseUrl()}${path}`;
+  const base = await baseUrl();
+  const url = `${base}${path}`;
 
   // A local backend runs unauthenticated, so no token is fetched and no
   // sign-in is ever forced on someone running SurfAI on their own machine.
@@ -102,11 +103,11 @@ async function request<T>(
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ApiError('The backend took too long to respond.', 0, true);
+      throw new ApiError(`The backend at ${base} took too long to respond.`, 0, true);
     }
     throw new ApiError(
-      'Could not reach the SurfAI backend. Check that it is running and that the ' +
-        'address in Settings is correct.',
+      `Could not reach a SurfAI backend at ${base}. Check that it is running, ` +
+        'and that the address in Settings is correct.',
       0,
       true,
     );
@@ -134,12 +135,35 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const detail =
-      (body as { detail?: string })?.detail ?? `The backend returned ${response.status}.`;
+    // The backend's own explanation is always better than anything invented
+    // here: a 422 for a bad page snapshot names the offending field.
+    const detail = (body as { detail?: string })?.detail ?? describeStatus(response.status, base);
     throw new ApiError(detail, response.status);
   }
 
   return body as T;
+}
+
+/**
+ * A failure with no body, said in terms of what to do about it.
+ *
+ * Always names the address. The first real failure in the wild read "The
+ * backend returned 404." while three different servers were listening on this
+ * machine and none of their logs showed the request, which left nothing to act
+ * on. A 404 in particular means something answered and it was not SurfAI, a
+ * different problem from the backend being down and a different fix.
+ */
+function describeStatus(status: number, base: string): string {
+  if (status === 404) {
+    return (
+      `${base} answered, but it is not a SurfAI backend (404 on the API path). ` +
+      'Another application is probably using that port. Check the address in Settings.'
+    );
+  }
+  if (status >= 500) {
+    return `The SurfAI backend at ${base} hit an error (${status}). Check its log.`;
+  }
+  return `The backend at ${base} returned ${status}.`;
 }
 
 // --- health ---------------------------------------------------------------
