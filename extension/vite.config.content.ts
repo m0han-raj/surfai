@@ -9,6 +9,10 @@ import { defineConfig } from 'vite';
  * has already written the side panel, worker and manifest into `dist/`.
  */
 export default defineConfig({
+  // Vite would otherwise copy all of public/ into dist. public/icons holds
+  // store-listing sizes and SVG source that must not ship inside the
+  // extension, so the copy is done explicitly and filtered instead.
+  publicDir: false,
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

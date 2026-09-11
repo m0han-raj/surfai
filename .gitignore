@@ -54,3 +54,5 @@ tmp/
 
 # Packaged extension archives
 extension/build/
+
+.vercel

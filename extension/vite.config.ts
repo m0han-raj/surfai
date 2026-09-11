@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { copyFileSync, mkdirSync, readdirSync, existsSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, existsSync, renameSync, rmSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -40,14 +40,22 @@ function copyStaticAssets() {
         rmSync(resolve(outDir, 'src'), { recursive: true, force: true });
       }
 
-      copyFileSync(resolve(__dirname, 'public/manifest.json'), resolve(outDir, 'manifest.json'));
+      const manifestPath = resolve(__dirname, 'public/manifest.json');
+      copyFileSync(manifestPath, resolve(outDir, 'manifest.json'));
 
-      const iconsSrc = resolve(__dirname, 'public/icons');
-      if (existsSync(iconsSrc)) {
-        const iconsOut = resolve(outDir, 'icons');
-        mkdirSync(iconsOut, { recursive: true });
-        for (const file of readdirSync(iconsSrc)) {
-          copyFileSync(resolve(iconsSrc, file), resolve(iconsOut, file));
+      // Copy only the icons the manifest actually declares. public/icons also
+      // holds store-listing sizes and the SVG source, which have no business
+      // being shipped inside the extension package.
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+      const declared = Object.values(manifest.icons ?? {}) as string[];
+      if (declared.length > 0) {
+        mkdirSync(resolve(outDir, 'icons'), { recursive: true });
+        for (const relative of declared) {
+          const from = resolve(__dirname, 'public', relative);
+          if (!existsSync(from)) {
+            throw new Error(`manifest.json declares ${relative}, which does not exist`);
+          }
+          copyFileSync(from, resolve(outDir, relative));
         }
       }
     },
@@ -55,6 +63,10 @@ function copyStaticAssets() {
 }
 
 export default defineConfig({
+  // Vite would otherwise copy all of public/ into dist. public/icons holds
+  // store-listing sizes and SVG source that must not ship inside the
+  // extension, so the copy is done explicitly and filtered instead.
+  publicDir: false,
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

@@ -50,11 +50,17 @@ async def lifespan(app: FastAPI):
     """
     connected, error = check_connection()
     if connected:
-        try:
-            create_all()
-            logger.info("Database ready")
-        except Exception:
-            logger.exception("Could not ensure database schema; run `alembic upgrade head`")
+        if settings.is_serverless:
+            # Every cold start would otherwise issue DDL, and two starting at
+            # once would race. Serverless deployments run `alembic upgrade head`
+            # as a deliberate step instead.
+            logger.info("Serverless host: skipping implicit schema creation")
+        else:
+            try:
+                create_all()
+                logger.info("Database ready")
+            except Exception:
+                logger.exception("Could not ensure database schema; run `alembic upgrade head`")
         _purge_stale_sessions()
     else:
         logger.warning("Database unavailable at startup (%s); /health will report degraded", error)

@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.database.models import Base
@@ -27,10 +28,19 @@ _SessionLocal: sessionmaker[Session] | None = None
 def _create_engine(url: str) -> Engine:
     connect_args: dict = {}
     kwargs: dict = {"echo": settings.db_echo, "pool_pre_ping": True, "future": True}
+
     if url.startswith("sqlite"):
         # Used by the test-suite; allow use across the TestClient's threads.
         connect_args["check_same_thread"] = False
         kwargs.pop("pool_pre_ping")
+    elif settings.is_serverless:
+        # One pool per process is fine on a long-lived server and ruinous on a
+        # serverless host, where dozens of concurrent invocations each hold
+        # their own. NullPool opens and closes per checkout instead, which is
+        # the right trade when the process itself is short-lived.
+        kwargs["poolclass"] = NullPool
+        kwargs.pop("pool_pre_ping")
+
     return create_engine(url, connect_args=connect_args, **kwargs)
 
 

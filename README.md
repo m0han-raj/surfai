@@ -142,6 +142,93 @@ notice, a summary that mentions the ignored instructions, and no navigation or d
 
 ---
 
+## Hosting it for other people
+
+Skip this entirely if SurfAI is just for you. A local backend needs no auth,
+costs nothing, and keeps page content on your machine.
+
+**`AUTH_PROVIDER` must be `google`.** The `local` provider gives every request
+the same identity. It has no login to bypass because it has no login, so a
+public deployment hands anyone who finds the URL everyone's favourites and
+history. The backend warns at startup, but nothing stops you.
+
+### 1. A Google OAuth client
+
+In the [Google Cloud console](https://console.cloud.google.com/apis/credentials):
+create a project, configure the OAuth consent screen (External; while it is in
+Testing only accounts you list can sign in), then create a **Chrome Extension**
+credential and paste your extension ID.
+
+To get a stable extension ID before publishing, build, load unpacked, and copy
+the ID from `chrome://extensions`. It is derived from the directory path and
+changes if you move the folder, so most people set this up after a first Web
+Store upload, which assigns a permanent one.
+
+Then add it to `extension/public/manifest.json`:
+
+```json
+"oauth2": {
+  "client_id": "YOUR_ID.apps.googleusercontent.com",
+  "scopes": ["openid", "email"]
+}
+```
+
+Ask for `openid` and `email` only. Identity comes from the token's subject;
+email is for display and the optional allowlist. More scopes mean a scarier
+consent screen for nothing.
+
+### 2. Deploy to Vercel
+
+```bash
+vercel link
+vercel env add AUTH_PROVIDER production        # google
+vercel env add GOOGLE_CLIENT_ID production
+vercel env add DATABASE_URL production         # Neon, Supabase or Vercel Postgres
+vercel env add LLM_BASE_URL production
+vercel env add LLM_API_KEY production
+vercel deploy --prod
+```
+
+`vercel.json` routes everything to the FastAPI app. Two things differ from the
+Docker path, and both are handled in code rather than left as footguns:
+
+- **Connection pooling.** A per-process pool is fine on a long-lived server and
+  ruinous across dozens of concurrent lambdas. The engine uses `NullPool` when
+  it detects Vercel, so use a pooled connection string (Neon and Supabase both
+  offer one) as well.
+- **Migrations.** Nothing runs them for you, and cold-start DDL would race. Run
+  them once against the same database, from anywhere:
+
+  ```bash
+  cd backend && DATABASE_URL="your-production-url" alembic upgrade head
+  ```
+
+**`maxDuration` is 60s.** A single agent step has to finish inside it, which is
+fine for a hosted model and not for a slow local one.
+
+### 3. Verify before trusting it
+
+```bash
+curl https://your-app.vercel.app/health
+curl -i https://your-app.vercel.app/api/favourites    # must be 401
+```
+
+**A 200 on that second one means you deployed in local mode and the instance is
+open to anyone.** Fix it before going further.
+
+To run it privately, set `ALLOWED_EMAILS` to a comma-separated list. It is
+enforced after the token verifies, so it is a real check.
+
+### What hosting does not give you
+
+No rate limiting and no per-user cost cap: a signed-in user can run as many
+tasks as they like and each step costs model tokens. No audit log beyond
+application logs. Token verification is cached per instance for up to five
+minutes, so revoking access takes that long to take effect. And none of it
+changes the prompt-injection position. Read [SECURITY.md](SECURITY.md) first.
+
+---
+
 ## Configuration
 
 Every setting is an environment variable; [.env.example](.env.example) is the annotated list. The
@@ -167,7 +254,7 @@ machine and wrong for anything else. `google` verifies a bearer token with Googl
 checks its audience against your own OAuth client id, derives identity from the token's stable
 subject rather than its email, and fails closed. Favourites, tasks and agent sessions are isolated
 per user, and a task can only be continued by whoever started it. See
-[deploy/README.md](deploy/README.md) before hosting it for anyone but yourself.
+[Hosting](#hosting-it-for-other-people) before running it for anyone but yourself.
 
 ---
 

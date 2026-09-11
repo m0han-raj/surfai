@@ -21,7 +21,7 @@ Anti-aliasing comes from the distance field rather than supersampling, which
 is both smoother and fast enough to stay dependency-free. Nothing here runs at
 request time.
 
-    python brand/generate.py
+    python extension/scripts/generate-icons.py
 """
 
 from __future__ import annotations
@@ -38,8 +38,9 @@ ACCENT_DEEP = (29, 78, 216)
 WHITE = (255, 255, 255)
 INK = (24, 24, 27)
 
-OUT = pathlib.Path(__file__).parent
-ICONS = OUT / "icons"
+# Everything lands in the extension's icon directory: the four sizes Chrome
+# loads, the larger ones a store listing needs, and the editable SVG source.
+ICONS = pathlib.Path(__file__).resolve().parent.parent / "public" / "icons"
 
 # Sizes Chrome asks for, plus the store and marketing sizes.
 EXTENSION_SIZES = (16, 32, 48, 128)
@@ -266,20 +267,21 @@ def svg(size: int = 512, *, background: bool = True) -> str:
 
 def main() -> None:
     ICONS.mkdir(parents=True, exist_ok=True)
+    root = ICONS.parents[2]
 
     for size in EXTENSION_SIZES + MARKETING_SIZES:
         path = ICONS / f"icon-{size}.png"
         path.write_bytes(render(size))
-        print(f"  {path.relative_to(OUT.parent)}  ({path.stat().st_size:,} bytes)")
+        print(f"  {path.relative_to(root)}  ({path.stat().st_size:,} bytes)")
 
     mark = ICONS / "mark-mono.png"
     mark.write_bytes(render(256, background=False, mono=INK))
-    print(f"  {mark.relative_to(OUT.parent)}  ({mark.stat().st_size:,} bytes)")
+    print(f"  {mark.relative_to(root)}  ({mark.stat().st_size:,} bytes)")
 
     for name, kwargs in (("logo.svg", {}), ("mark.svg", {"background": False})):
-        path = OUT / name
+        path = ICONS / name
         path.write_text(svg(512, **kwargs), encoding="utf-8")
-        print(f"  {path.relative_to(OUT.parent)}")
+        print(f"  {path.relative_to(root)}")
 
 
 if __name__ == "__main__":

@@ -261,7 +261,7 @@ inspecting queries.
 
 Before exposing SurfAI to a network: set `AUTH_PROVIDER=google`, change the default database
 password, restrict `CORS_ALLOW_ORIGINS` to your extension id, and confirm an unauthenticated
-request to `/api/favourites` returns 401. See [deploy/README.md](deploy/README.md).
+request to `/api/favourites` returns 401. See the Hosting section of [README.md](README.md).
 
 ---
 

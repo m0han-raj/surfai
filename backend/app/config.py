@@ -33,6 +33,15 @@ class Settings(BaseSettings):
         description="SQLAlchemy URL. Tests override this with SQLite.",
     )
     db_echo: bool = False
+    # Set automatically by Vercel. On a serverless host every invocation may be
+    # a fresh process, so a per-process connection pool multiplies by the number
+    # of concurrent lambdas and exhausts PostgreSQL. Detecting it here lets the
+    # engine hold no pool at all.
+    vercel: str = ""
+
+    @property
+    def is_serverless(self) -> bool:
+        return bool(self.vercel)
 
     # --- LLM -------------------------------------------------------------
     # Defaults target a local OpenAI-compatible runtime (Ollama, llama.cpp,
