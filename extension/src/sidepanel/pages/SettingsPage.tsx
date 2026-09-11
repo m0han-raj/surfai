@@ -8,6 +8,7 @@ import {
   type SurfAISettings,
 } from '../../services/storage';
 import { api, type HealthResponse, type LlmHealthResponse } from '../../services/api';
+import { hasPageAccess, requestPageAccess, revokePageAccess } from '../../services/pageAccess';
 import {
   getAccountEmail,
   isAuthConfigured,
@@ -39,6 +40,8 @@ export default function SettingsPage() {
   });
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  const [pageAccess, setPageAccess] = useState(false);
+  const [accessBusy, setAccessBusy] = useState(false);
 
   useEffect(() => {
     void getSettings().then(setSettings);
@@ -65,6 +68,20 @@ export default function SettingsPage() {
     void checkConnections();
     // Re-check whenever the backend address changes.
   }, [settings.backendUrl]);
+
+  useEffect(() => {
+    void hasPageAccess().then(setPageAccess);
+  }, []);
+
+  async function togglePageAccess() {
+    setAccessBusy(true);
+    // Re-read rather than assume: the user can decline the prompt, and can
+    // also change this in Chrome's own Site access controls behind our back.
+    if (pageAccess) await revokePageAccess();
+    else await requestPageAccess();
+    setPageAccess(await hasPageAccess());
+    setAccessBusy(false);
+  }
 
   const refreshAccount = useCallback(async () => {
     if (!isAuthConfigured()) return;
@@ -324,6 +341,35 @@ export default function SettingsPage() {
           </div>
         </>
       )}
+
+      <h2 className="section__header section__header--static">
+        <span>Page access</span>
+      </h2>
+      <div className="section__body stack">
+        <p className="text-sm text-muted">
+          Without this, SurfAI can only read the tab it was opened on, and loses track of the
+          page as soon as you switch tabs. Granting it lets the chat follow whichever tab you
+          are looking at. You can take it back here, or under Site access at
+          chrome://extensions.
+        </p>
+
+        <StatusRow
+          label="Reading pages as you browse"
+          ok={pageAccess}
+          detail={pageAccess ? 'Allowed' : 'Only the tab SurfAI was opened on'}
+        />
+
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className={pageAccess ? 'button' : 'button button--primary'}
+            onClick={togglePageAccess}
+            disabled={accessBusy}
+          >
+            {pageAccess ? 'Turn off' : 'Allow SurfAI to read pages'}
+          </button>
+        </div>
+      </div>
 
       <h2 className="section__header section__header--static">
         <span>Privacy</span>

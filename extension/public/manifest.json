@@ -16,6 +16,9 @@
     "http://127.0.0.1/*",
     "https://surfai-iota.vercel.app/*"
   ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "oauth2": {
     "client_id": "378322140675-k1munob8nosfrbunat62dmthfko558hf.apps.googleusercontent.com",
     "scopes": [

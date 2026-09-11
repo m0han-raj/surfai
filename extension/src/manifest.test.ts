@@ -3,8 +3,9 @@
  *
  * These guard properties that are easy to break silently and expensive to
  * notice: a narrowed connect-src makes the Settings "backend address" field
- * non-functional, and a widened host permission hands SurfAI access to every
- * site the user visits.
+ * non-functional, and a host permission that moves from optional to granted
+ * hands SurfAI access to every site the user visits without them agreeing to
+ * it.
  */
 
 import { readFileSync } from 'node:fs';
@@ -17,6 +18,7 @@ const manifest = JSON.parse(
   manifest_version: number;
   permissions: string[];
   host_permissions: string[];
+  optional_host_permissions: string[];
   background: { service_worker: string; type: string };
   side_panel: { default_path: string };
   content_security_policy: { extension_pages: string };
@@ -34,12 +36,33 @@ describe('extension manifest', () => {
     );
   });
 
-  it('never requests access to every site', () => {
-    const serialised = JSON.stringify(manifest);
-    expect(serialised).not.toContain('<all_urls>');
-    expect(serialised).not.toContain('*://*/*');
-    expect(serialised).not.toContain('http://*/*');
-    expect(serialised).not.toContain('https://*/*');
+  it('never takes access to every site at install', () => {
+    // This used to forbid <all_urls> outright. That was the right rule while
+    // SurfAI only read the page you pointed it at, and the wrong one once the
+    // panel had to follow you between tabs: `activeTab` covers the tab the
+    // panel was opened on and nothing you navigate to after, so the chat kept
+    // losing track of which site you were looking at.
+    //
+    // What survives of the rule is the part that matters. Nothing broad is
+    // granted by installing SurfAI. Broad access is asked for from a button,
+    // and Chrome's Site access controls can take it back.
+    const granted = JSON.stringify({
+      permissions: manifest.permissions,
+      host_permissions: manifest.host_permissions,
+    });
+
+    for (const pattern of ['<all_urls>', '*://*/*', 'http://*/*', 'https://*/*']) {
+      expect(granted, `${pattern} must not be granted at install`).not.toContain(pattern);
+    }
+  });
+
+  it('asks for broad access rather than assuming it', () => {
+    expect(manifest.optional_host_permissions).toEqual(['<all_urls>']);
+  });
+
+  it('keeps activeTab, so declining leaves a narrower SurfAI and not a broken one', () => {
+    // The tab the panel was opened on still works with no grant at all.
+    expect(manifest.permissions).toContain('activeTab');
   });
 
   it('grants host access only to localhost and the one known backend', () => {

@@ -14,37 +14,10 @@ import type {
   MessageResponse,
   TabContext,
 } from '../types/messages';
+import { explainInjectionFailure, isRestricted, restrictedMessage } from './access';
 
 const CONTENT_SCRIPT = 'content.js';
 const INJECT_TIMEOUT_MS = 5000;
-
-/** Pages where Chrome refuses content-script injection. */
-const RESTRICTED_PREFIXES = [
-  'chrome://',
-  'chrome-extension://',
-  'edge://',
-  'about:',
-  'devtools://',
-  'view-source:',
-  'https://chromewebstore.google.com',
-  'https://chrome.google.com/webstore',
-];
-
-function isRestricted(url: string | undefined): boolean {
-  if (!url) return true;
-  return RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
-}
-
-function restrictedMessage(url: string | undefined): string {
-  if (!url) return 'No active tab was found.';
-  if (url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:')) {
-    return 'SurfAI cannot read browser settings pages. Open a website and try again.';
-  }
-  if (url.includes('chromewebstore') || url.includes('chrome.google.com/webstore')) {
-    return 'Chrome blocks extensions from reading the Web Store. Open another site and try again.';
-  }
-  return 'SurfAI cannot read this page. Open a regular website and try again.';
-}
 
 /** Open the side panel when the toolbar icon is clicked. */
 chrome.runtime.onInstalled.addListener(() => {
@@ -100,10 +73,9 @@ async function ensureContentScript(tabId: number, url?: string): Promise<void> {
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    if (/cannot be scripted|Extension manifest must request permission/i.test(detail)) {
-      throw new Error(restrictedMessage(url));
-    }
-    throw new Error(`SurfAI could not attach to this page: ${detail}`);
+    // A page Chrome forbids and a page we were never granted are different
+    // problems, and only one of them the user can fix.
+    throw new Error(explainInjectionFailure(url, detail).message);
   }
 
   // The listener registers synchronously on injection, but give the document a
