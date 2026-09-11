@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="SurfAI">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgb(37, 99, 235)"/>
+      <stop offset="100%" stop-color="rgb(29, 78, 216)"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="115.2" fill="url(#g)"/>
+  <path d="M 83.97 368.64 C 149.5 368.64, 157.7 172.03, 288.77 172.03 C 395.26 172.03, 395.26 311.3, 309.25 307.2" fill="none" stroke="white" stroke-width="28.67" stroke-linecap="round"/>
+</svg>

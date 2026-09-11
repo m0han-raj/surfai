@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "package": "npm run build && node scripts/package.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",

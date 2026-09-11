@@ -51,3 +51,6 @@ desktop.ini
 *.local
 tmp/
 .tmp/
+
+# Packaged extension archives
+extension/build/
