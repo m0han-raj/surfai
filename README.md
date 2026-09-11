@@ -195,11 +195,25 @@ Set these in **Project Settings, Environment Variables**:
 | `LLM_API_KEY` | if that endpoint needs one |
 | `ALLOWED_EMAILS` | optional, to keep the instance private |
 
-Then run the migrations once, from anywhere, against the same database:
+Provisioning a database through Vercel's Storage tab (Neon, Supabase) injects
+`DATABASE_URL`, `POSTGRES_URL` and a dozen siblings automatically. The backend
+reads whichever is present and adds the psycopg driver prefix itself, so nothing
+needs copying by hand. Add a variable, then redeploy: Vercel bakes environment
+into a deployment, so existing ones do not pick up new values.
+
+Migrations are the one manual step. Vercel will not reveal a secret environment
+variable, and Alembic is excluded from the deployment to stay inside the lambda
+size limit, so run it locally against the same database:
 
 ```bash
-cd backend && DATABASE_URL="your-production-url" alembic upgrade head
+cd backend
+DATABASE_URL="<direct connection string>" .venv/Scripts/python -m alembic upgrade head
 ```
+
+Use the **direct** (unpooled) string here, not the pooled one. Neon exposes it as
+`DATABASE_URL_UNPOOLED`, and DDL through a transaction-mode pooler is unreliable.
+Application traffic should still use the pooled URL, which is why the backend
+prefers it.
 
 Three things differ from the container path. All are handled in code, but they
 explain the shape of the configuration:
