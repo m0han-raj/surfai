@@ -7,6 +7,7 @@ obvious one here.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -111,6 +112,55 @@ def test_the_entrypoint_exposes_an_asgi_app() -> None:
     """Vercel imports `app` from the entrypoint; a rename would 500 on deploy."""
     source = (ROOT / "backend" / "app" / "main.py").read_text(encoding="utf-8")
     assert re.search(r"^app = FastAPI\(", source, re.MULTILINE)
+
+    # The shim re-exports it, and exists only to put `backend/` on sys.path.
+    shim = (ROOT / "backend" / "vercel_entry.py").read_text(encoding="utf-8")
+    assert "from app.main import app" in shim
+    assert "sys.path" in shim, (
+        "vercel_entry.py exists solely to make the app package importable when "
+        "the working directory is not backend/. Without it the lambda raises "
+        "ModuleNotFoundError on every request."
+    )
+
+
+def test_the_serverless_entrypoint_imports_without_the_backend_cwd() -> None:
+    """Reproduce what Vercel does: load the file by path, from elsewhere.
+
+    No PYTHONPATH and a different working directory, so the only thing that can
+    make `from app.main import app` resolve is the sys.path insert inside the
+    shim. Without it this raises ModuleNotFoundError, which is exactly how the
+    first deployment failed on every request.
+    """
+    import subprocess
+    import sys
+
+    script = (
+        "import importlib.util, sys;"
+        "spec = importlib.util.spec_from_file_location('vercel_entry', r'{path}');"
+        "mod = importlib.util.module_from_spec(spec);"
+        "spec.loader.exec_module(mod);"
+        "assert mod.app is not None;"
+        "print('ok')"
+    ).format(path=ROOT / "backend" / "vercel_entry.py")
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=ROOT,
+        env={
+            "PATH": os.environ.get("PATH", ""),
+            "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+            "DATABASE_URL": "sqlite:///./_entry_check.db",
+        },
+        capture_output=True,
+        text=True,
+    )
+    (ROOT / "_entry_check.db").unlink(missing_ok=True)
+
+    assert result.returncode == 0, (
+        "the serverless entrypoint could not import itself outside backend/: "
+        + result.stderr[-900:]
+    )
+    assert "ok" in result.stdout
 
 
 def test_the_manifest_declares_icons_that_exist() -> None:
