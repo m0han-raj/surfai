@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.assistant import Assistant, needs_page_context
+from app.agents.assistant import (
+    Assistant,
+    PageDetail,
+    needs_page_context,
+    page_detail_for,
+)
 
 
 def _user_turn(fake_llm) -> str:
@@ -73,11 +78,13 @@ async def test_general_question_is_answered_without_page_context(
 
     assert reply.message == "Recursion is when a function calls itself."
     assert reply.used_page is False
-    # The page never reached the model. The system prompt's trust rules mention
-    # the envelope by name, so the check is that no envelope was opened in the
-    # user turn, not that the word is absent everywhere.
+    # The page's *content* never reached the model. Its identity did, and that
+    # is deliberate: this test used to insist on no envelope at all, which is
+    # also what left SurfAI unable to say which page it was beside. Thirty
+    # tokens of url and title is not "reading the page", and it is the
+    # difference between answering "which page am I on" and refusing to.
     assert "Search products" not in fake_llm.prompt_text()
-    assert "<WEBPAGE_DATA>" not in _user_turn(fake_llm)
+    assert "shop.example.com" in _user_turn(fake_llm)
 
 
 async def test_page_question_is_grounded_in_the_page(fake_llm, product_page) -> None:
@@ -365,3 +372,110 @@ async def test_a_page_with_controls_but_no_text_still_counts_as_read(fake_llm) -
     )
 
     assert reply.used_page is True
+
+
+# --- how much of the page a question deserves -----------------------------
+
+
+def test_it_always_knows_which_page_it_is_beside() -> None:
+    """The question a browser side panel must never fumble.
+
+    "which page i am in" matched none of the patterns, so no page was attached
+    and SurfAI answered "I don't have access to the current webpage you're
+    viewing" while sitting next to www.amazon.in with the domain printed in its
+    own header. Adding that phrasing to a list would have fixed the sentence
+    and not the problem, which is that the page's identity costs almost nothing
+    and is never the wrong thing to know.
+    """
+    for message in (
+        "which page i am in",
+        "which page am i on",
+        "which website am i on",
+        "what site is this",
+        "where am i",
+        "what url is this",
+        "what am i looking at",
+    ):
+        assert page_detail_for(message) is not PageDetail.NONE, message
+
+
+def test_naming_the_page_earns_the_whole_thing() -> None:
+    for message in (
+        "summarise this page",
+        "what are the common mistakes this page mentions?",
+        "who wrote this article",
+    ):
+        assert page_detail_for(message) is PageDetail.FULL, message
+
+
+def test_a_clearly_general_question_gets_the_identity_and_no_more() -> None:
+    """Cheap enough to always carry, and it keeps SurfAI oriented.
+
+    Twelve thousand characters of a page nobody asked about is a real slice of
+    a per-minute token budget; the name of the page is thirty.
+    """
+    for message in (
+        "write me a haiku about rain",
+        "what is a closure in javascript",
+        "translate good morning into spanish",
+    ):
+        assert page_detail_for(message) is PageDetail.IDENTITY, message
+
+
+def test_a_loose_reference_to_the_page_gets_a_short_excerpt() -> None:
+    """The honest middle: enough to answer from, far short of the full budget."""
+    for message in ("what are the prices", "anything interesting here?", "what is it showing"):
+        assert page_detail_for(message) is PageDetail.BRIEF, message
+
+
+def test_an_unrecognised_question_still_knows_where_it_is() -> None:
+    """Which is all "which page i am in" ever needed.
+
+    It matches no pattern at all, and under the old design that meant no page
+    and a flat "I don't have access to the current webpage". The identity
+    costs thirty tokens and answers it outright.
+    """
+    assert page_detail_for("which page i am in") is PageDetail.IDENTITY
+
+
+@pytest.mark.asyncio
+async def test_a_general_question_beside_a_page_still_costs_little(fake_llm) -> None:
+    fake_llm.text = "Paris."
+    page = {
+        "url": "https://cooking.example.com/carbonara",
+        "domain": "cooking.example.com",
+        "title": "Classic Carbonara",
+        "summary": "x" * 12_000,
+        "elements": [{"id": "e1", "type": "button", "text": "Print"}],
+    }
+
+    await Assistant(fake_llm).answer("write me a haiku about rain", page=page)
+
+    prompt = fake_llm.prompt_text()
+    assert "cooking.example.com" in prompt, "it should still know where it is"
+    assert "x" * 2000 not in prompt, "it should not have carried the whole page"
+
+
+@pytest.mark.asyncio
+async def test_asking_where_you_are_reaches_the_model_with_an_answer(fake_llm) -> None:
+    """The reported failure, end to end.
+
+    SurfAI replied "I don't have access to the current webpage you're viewing"
+    while its own header read www.amazon.in. The model now receives the url and
+    title whatever the question, so the answer is available to it.
+    """
+    fake_llm.text = "You are on www.amazon.in."
+    page = {
+        "url": "https://www.amazon.in/dp/B08",
+        "domain": "www.amazon.in",
+        "title": "Amazon.in",
+        "summary": "Wireless mice, from 499 rupees.",
+        "elements": [{"id": "e1", "type": "button", "text": "Add to cart"}],
+    }
+
+    reply = await Assistant(fake_llm).answer("which page i am in", page=page)
+
+    assert "www.amazon.in" in fake_llm.prompt_text()
+    # Identity is not reading: the listings did not travel with it.
+    assert reply.used_page is False
+    assert "Wireless mice" not in fake_llm.prompt_text()

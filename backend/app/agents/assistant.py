@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 from urllib.parse import urlparse
 
@@ -55,7 +56,7 @@ _REFERS_TO_PAGE = re.compile(
     r"this|these|those|here|it|current|this one|"
     r"above|below|"
     r"summar(y|ise|ize)|tldr|tl;dr|"
-    r"the price|listed|shown|displayed|visible"
+    r"prices?|cost|listed|shown|displayed|visible"
     r")\b",
     re.IGNORECASE,
 )
@@ -63,11 +64,77 @@ _REFERS_TO_PAGE = re.compile(
 # Questions that are explicitly about general knowledge never need the page,
 # even when they happen to contain a word like "it".
 _CLEARLY_GENERAL = re.compile(
-    r"^\s*(write|compose|draft|translate|define|what is a|what is it|what are|"
+    # "what are" is deliberately absent: "what are the prices", "what are the
+    # ingredients" and "what are the options" are all questions about the page,
+    # and it was broad enough to swallow them.
+    # "what is it called" rather than "what is it": the shorter form also
+    # swallowed "what is it showing", which is a question about the page.
+    r"^\s*(write|compose|draft|translate|define|what is a|what is it called|"
     r"who is|how do i|how does a|explain the concept|tell me about|"
     r"give me an example)\b",
     re.IGNORECASE,
 )
+
+
+class PageDetail(StrEnum):
+    """How much of the current page a question has earned."""
+
+    NONE = "none"
+    #: Url, domain and title. Around thirty tokens, and never the wrong thing
+    #: to know: it is what answers "which page am I on".
+    IDENTITY = "identity"
+    #: Identity plus a short excerpt. The default, because a question asked
+    #: beside a page is usually about the page.
+    BRIEF = "brief"
+    #: The configured budget, for a question that named the page.
+    FULL = "full"
+
+
+#: Excerpt for BRIEF. Enough to answer from, a fraction of the full budget.
+BRIEF_CHARS = 1_500
+
+
+def page_detail_for(message: str) -> PageDetail:
+    """Decide how much page to attach.
+
+    The polarity here used to be the other way round: nothing unless a pattern
+    matched. "which page i am in" matched nothing, so SurfAI answered "I don't
+    have access to the current webpage you're viewing" with the domain printed
+    in its own header, two inches above. Adding that phrasing to the list would
+    have fixed the sentence rather than the problem.
+
+    So the page's identity now travels with every question. It is the cheapest
+    thing SurfAI knows and it is never the wrong thing to know. Content is
+    still earned, because twelve thousand characters of a page nobody asked
+    about is a real slice of a per-minute token budget.
+    """
+    text = message or ""
+
+    if _NAMES_THE_PAGE.search(text):
+        return PageDetail.FULL
+    if _CLEARLY_GENERAL.match(text):
+        return PageDetail.IDENTITY
+    if _REFERS_TO_PAGE.search(text):
+        return PageDetail.BRIEF
+    # Everything else: the identity, which is nearly free and is what makes
+    # "which page am I on" answerable no matter how it was phrased.
+    return PageDetail.IDENTITY
+
+
+def _trim_page(page: dict[str, Any], detail: PageDetail) -> dict[str, Any]:
+    """Cut the page down to what this question earned."""
+    if detail is PageDetail.FULL:
+        return page
+
+    trimmed = dict(page)
+    if detail is PageDetail.IDENTITY:
+        trimmed["summary"] = ""
+        trimmed["elements"] = []
+    else:
+        trimmed["summary"] = (page.get("summary") or "")[:BRIEF_CHARS]
+        # A handful of controls still says what kind of page this is.
+        trimmed["elements"] = list(page.get("elements") or [])[:12]
+    return trimmed
 
 
 def _is_readable(page: dict[str, Any] | None) -> bool:
@@ -160,12 +227,22 @@ class Assistant:
         `force_page` overrides the heuristic when the caller already knows
         (a favourite-scoped question, for example).
         """
-        use_page = needs_page_context(message) if force_page is None else force_page
+        detail = page_detail_for(message)
+        if force_page is True:
+            detail = PageDetail.FULL
+        elif force_page is False:
+            detail = PageDetail.NONE
+        # Identity alone is not "used the page": it is SurfAI knowing where it
+        # is standing, which it always should.
+        use_page = detail in (PageDetail.BRIEF, PageDetail.FULL)
+
         warnings: list[str] = []
         scan: InjectionScan | None = None
         clean: dict[str, Any] | None = None
 
-        if use_page and not _is_readable(page):
+        # Only a question that actually wanted the page should complain about
+        # its absence. A general one is unaffected by it.
+        if detail in (PageDetail.FULL, PageDetail.BRIEF) and not _is_readable(page):
             # The question is about the page and there is no page. Answering
             # anyway is the failure that matters here: given a tab title and a
             # few earlier turns, the model writes a confident description of a
@@ -175,8 +252,8 @@ class Assistant:
             # switched to. Saying so costs a request and buys the truth.
             return AssistantReply(message=_cannot_see_page(page), used_page=False)
 
-        if use_page and page and page.get("elements") is not None:
-            clean, scan = sanitize_page(page)
+        if detail is not PageDetail.NONE and page and page.get("elements") is not None:
+            clean, scan = sanitize_page(_trim_page(page, detail))
             if scan.is_suspicious:
                 warnings.append(
                     "This page contains text that tried to give the assistant "
@@ -219,6 +296,8 @@ class Assistant:
 
         return AssistantReply(
             message=text,
-            used_page=clean is not None,
+            # Identity alone does not count: SurfAI knowing where it is
+            # standing is not the same as having read the page.
+            used_page=use_page and clean is not None,
             warnings=warnings,
         )
