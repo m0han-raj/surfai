@@ -160,8 +160,14 @@ Structured output negotiates strictness downward (`json_schema`, then `json_obje
 prompt-only extraction) and the result is always validated locally, so unvalidated model output never
 reaches the browser. Chrome permissions stay narrow: `activeTab` rather than `<all_urls>`, with the
 content script injected on demand, and host access limited to localhost so the backend port is
-configurable. Auth is a single local user behind an `AuthProvider` interface, correct for a localhost
-tool and wrong for a shared deployment.
+configurable.
+
+Auth has two modes. `local` is a single unauthenticated user, correct for a backend on your own
+machine and wrong for anything else. `google` verifies a bearer token with Google on every request,
+checks its audience against your own OAuth client id, derives identity from the token's stable
+subject rather than its email, and fails closed. Favourites, tasks and agent sessions are isolated
+per user, and a task can only be continued by whoever started it. See
+[deploy/README.md](deploy/README.md) before hosting it for anyone but yourself.
 
 ---
 
@@ -170,18 +176,19 @@ tool and wrong for a shared deployment.
 `pytest -q` in `backend/` and `npm test` in `extension/`. Neither needs PostgreSQL or a model: SQLite
 with a scripted fake provider, and jsdom. CI runs both plus the Docker build on every push.
 
-285 backend and 107 extension tests cover the action schema and its TS/Python parity, injection
+327 backend and 107 extension tests cover the action schema and its TS/Python parity, injection
 defence, the direct-answer path (a question must not observe the page or create a task), the loop's
-retry and confirmation paths, favourite resolution, snapshot extraction, the manifest's permission
-balance, and the demo pages loaded from disk.
+retry and confirmation paths, token verification and its failure-closed behaviour, per-user
+isolation, a task continued by a different backend instance, favourite resolution, snapshot
+extraction, the manifest's permission balance, and the demo pages loaded from disk.
 
 ---
 
 ## Limitations
 
 Real-model planning quality is unmeasured; expect to tune prompts and `MAX_ELEMENTS_IN_CONTEXT`.
-In-flight tasks live in memory and are lost on restart, though completed history persists. One tab,
-one task, one local user: no cross-site workflows and no multi-user auth yet. No login automation, no
+One tab, one task at a time, and no cross-site workflows. A hosted deployment has no rate limiting
+or per-user cost cap, so every signed-in user can spend model tokens freely. No login automation, no
 CAPTCHA solving, no streaming, so a reply appears when it is complete. Tool discovery is heuristic
 and unusual widgets fall back to page text. Whether a question needs the page is decided by a
 keyword heuristic, which is cheap and occasionally wrong in the harmless direction. And injection

@@ -58,34 +58,35 @@ class LocalAuthProvider(AuthProvider):
         return User(id=self.user_id, display_name="Local user", provider=self.name)
 
 
-class OAuthAuthProvider(AuthProvider):  # pragma: no cover - future work
-    """Placeholder for a future OAuth provider.
-
-    Deliberately not implemented: shipping a half-working auth path would be
-    worse than shipping none. It exists to fix the shape of the interface.
-    """
-
-    name = "oauth"
-
-    async def authenticate(self, request: Request) -> User | None:
-        raise NotImplementedError(
-            "OAuth authentication is not part of the MVP. See the roadmap in README.md."
-        )
-
-
-_PROVIDERS: dict[str, type[AuthProvider]] = {
-    "local": LocalAuthProvider,
-    "oauth": OAuthAuthProvider,
-}
-
 _provider: AuthProvider | None = None
+
+
+def _build_provider(name: str) -> AuthProvider:
+    """Construct the configured provider.
+
+    Imported lazily so the local path carries no dependency on the Google one,
+    and an unknown name fails loudly rather than silently falling back to the
+    unauthenticated provider.
+    """
+    key = (name or "").strip().lower()
+
+    if key in ("", "local"):
+        return LocalAuthProvider()
+
+    if key == "google":
+        from app.security.google_auth import GoogleAuthProvider
+
+        return GoogleAuthProvider()
+
+    raise ValueError(
+        f"Unknown AUTH_PROVIDER {name!r}. Supported values are 'local' and 'google'."
+    )
 
 
 def get_auth_provider() -> AuthProvider:
     global _provider
     if _provider is None:
-        provider_cls = _PROVIDERS.get(settings.auth_provider.lower(), LocalAuthProvider)
-        _provider = provider_cls()
+        _provider = _build_provider(settings.auth_provider)
     return _provider
 
 

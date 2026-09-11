@@ -3,7 +3,11 @@
  *
  * The extension holds no model credentials: every LLM call goes through the
  * backend, which reads its key from the environment. That is why the panel
- * talks to `localhost:8000` rather than to an inference endpoint directly.
+ * talks to a backend rather than to an inference endpoint directly.
+ *
+ * A hosted backend additionally requires a Google bearer token, attached here
+ * and refreshed once on a 401. A local backend requires none, so nothing here
+ * prompts a local user to sign in.
  */
 
 import type { Directive } from '../types/agent';
@@ -13,6 +17,7 @@ import type { ActionResult } from '@shared/action-schema';
 import type { SemanticPage } from '@shared/types';
 import type { TabContext } from '../types/messages';
 import { getSettings } from './storage';
+import { getToken, invalidateToken, isAuthConfigured } from './auth';
 
 export const DEFAULT_BACKEND_URL = 'http://localhost:8000';
 
@@ -21,6 +26,8 @@ export class ApiError extends Error {
     message: string,
     readonly status: number = 0,
     readonly isNetwork = false,
+    /** The caller should prompt the user to sign in. */
+    readonly needsSignIn = false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -32,25 +39,54 @@ async function baseUrl(): Promise<string> {
   return (settings.backendUrl || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
 }
 
+async function send(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  token: string | null,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
   const { timeoutMs = 180_000, ...init } = options;
   const url = `${await baseUrl()}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  // A local backend runs unauthenticated, so no token is fetched and no
+  // sign-in is ever forced on someone running SurfAI on their own machine.
+  let token = isAuthConfigured() ? await getToken(false) : null;
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init.headers ?? {}),
-      },
-    });
+    response = await send(url, init, timeoutMs, token);
+
+    // Chrome caches tokens and will keep returning one the server has already
+    // rejected, so a 401 has to evict it before retrying.
+    if (response.status === 401 && token) {
+      await invalidateToken(token);
+      token = await getToken(false);
+      if (token) {
+        response = await send(url, init, timeoutMs, token);
+      }
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new ApiError('The backend took too long to respond.', 0, true);
@@ -61,8 +97,15 @@ async function request<T>(
       0,
       true,
     );
-  } finally {
-    clearTimeout(timer);
+  }
+
+  if (response.status === 401) {
+    throw new ApiError(
+      'This backend requires you to sign in. Open Settings and sign in with Google.',
+      401,
+      false,
+      true,
+    );
   }
 
   if (response.status === 204) {

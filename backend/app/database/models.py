@@ -105,6 +105,35 @@ class Task(Base):
     )
 
 
+class AgentSession(Base):
+    """Live state for an in-flight task.
+
+    The agent loop spans many HTTP round trips, so its state has to outlive the
+    process handling any one of them. Keeping it here rather than in memory is
+    what allows more than one backend instance, and what stops a restart from
+    stranding a task mid-step.
+
+    Rows are transient: they are deleted when the task reaches a terminal state.
+    """
+
+    __tablename__ = "agent_sessions"
+
+    task_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[dict] = mapped_column(JSONType, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_now,
+        onupdate=_now,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (Index("ix_agent_sessions_user_id", "user_id"),)
+
+
 class TaskAction(Base):
     """A single step within a task, with its structured result."""
 

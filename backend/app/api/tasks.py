@@ -40,6 +40,7 @@ async def create_task(
         message=payload.request,
         page=page,
         favourite=favourite,
+        user_id=user.id,
     )
     return directive.to_dict()
 
@@ -57,6 +58,7 @@ async def continue_task(
         page=payload.page_context,
         result=payload.result,
         confirmation=payload.confirmation,
+        user_id=user.id,
     )
     if directive.state in TERMINAL_STATES:
         orchestrator.drop_session(task_id)
@@ -70,7 +72,7 @@ async def cancel_task(
     user: User = Depends(get_current_user),
 ) -> dict:
     """Stop a running task. Idempotent; history is preserved."""
-    directive = orchestrator.cancel(task_id)
+    directive = orchestrator.cancel(task_id, user.id)
     orchestrator.drop_session(task_id)
     return directive.to_dict()
 
@@ -102,7 +104,7 @@ async def get_task(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     data = task_to_dict(task)
-    live = orchestrator.get_session(task_id)
+    live = orchestrator.get_session(task_id, user.id)
     data["live"] = (
         {"state": live.state, "step": live.step, "warnings": live.warnings} if live else None
     )

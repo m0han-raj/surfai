@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.agents.memory_agent import MemoryAgent
-from app.agents.page_agent import PageAgent, PageUnderstanding
+from app.agents.page_agent import PageAgent
 from app.agents.planner import Planner, PlannerContext, PlannerError
 from app.agents.tool_discovery import ToolDiscovery
 from app.browser.action_schema import BrowserAction
@@ -92,15 +92,23 @@ class Directive:
 
 @dataclass
 class Session:
-    """In-memory state for one running task."""
+    """State for one running task.
+
+    Serialisable, because the agent loop spans many HTTP round trips and the
+    state has to survive both a restart and a request landing on a different
+    instance. `to_dict`/`from_dict` are the whole contract with the store.
+    """
 
     task_id: str
     goal: str
     user_message: str
+    user_id: str = ""
     state: str = IDLE
     step: int = 0
     consecutive_failures: int = 0
-    started_at: float = field(default_factory=time.monotonic)
+    # Wall clock rather than a monotonic counter: elapsed time has to mean
+    # something across processes.
+    started_at: float = field(default_factory=time.time)
     history: list[dict[str, Any]] = field(default_factory=list)
     tools: list[dict[str, Any]] = field(default_factory=list)
     favourite: dict[str, Any] | None = None
@@ -110,17 +118,111 @@ class Session:
     cancelled: bool = False
     current_url: str = ""
     warnings: list[str] = field(default_factory=list)
-    last_understanding: PageUnderstanding | None = None
 
     @property
     def elapsed(self) -> float:
-        return time.monotonic() - self.started_at
+        return max(0.0, time.time() - self.started_at)
 
     def extracted_text(self) -> str | None:
         if not self.extracted:
             return None
         joined = "\n\n".join(self.extracted[-3:])
         return format_extracted(joined)
+
+    # -- serialisation ----------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task_id": self.task_id,
+            "goal": self.goal,
+            "user_message": self.user_message,
+            "user_id": self.user_id,
+            "state": self.state,
+            "step": self.step,
+            "consecutive_failures": self.consecutive_failures,
+            "started_at": self.started_at,
+            "history": self.history,
+            "tools": self.tools,
+            "favourite": self.favourite,
+            "extracted": self.extracted,
+            "pending_action": (
+                self.pending_action.model_dump() if self.pending_action else None
+            ),
+            "pending_risk": self.pending_risk,
+            "cancelled": self.cancelled,
+            "current_url": self.current_url,
+            "warnings": self.warnings,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Session:
+        pending = data.get("pending_action")
+        action: BrowserAction | None = None
+        if pending:
+            try:
+                action = BrowserAction.model_validate(pending)
+            except Exception:  # noqa: BLE001
+                # A stored action that no longer validates against the current
+                # schema is dropped rather than trusted. The task then asks the
+                # planner again, which is the safe direction.
+                logger.warning("Discarded an unparseable pending action on restore")
+
+        return cls(
+            task_id=str(data.get("task_id", "")),
+            goal=str(data.get("goal", "")),
+            user_message=str(data.get("user_message", "")),
+            user_id=str(data.get("user_id", "")),
+            state=str(data.get("state", IDLE)),
+            step=int(data.get("step", 0)),
+            consecutive_failures=int(data.get("consecutive_failures", 0)),
+            started_at=float(data.get("started_at", time.time())),
+            history=list(data.get("history") or []),
+            tools=list(data.get("tools") or []),
+            favourite=data.get("favourite"),
+            extracted=list(data.get("extracted") or []),
+            pending_action=action,
+            pending_risk=data.get("pending_risk"),
+            cancelled=bool(data.get("cancelled", False)),
+            current_url=str(data.get("current_url", "")),
+            warnings=list(data.get("warnings") or []),
+        )
+
+
+class SessionStore:
+    """Where in-flight agent state lives.
+
+    Narrow on purpose: the orchestrator does not care whether this is a dict or
+    a database, which keeps the loop testable without either.
+    """
+
+    def load(self, task_id: str, user_id: str) -> Session | None:
+        ...
+
+    def save(self, session: Session) -> None:
+        ...
+
+    def delete(self, task_id: str) -> None:
+        ...
+
+
+class MemorySessionStore(SessionStore):
+    """Single-process store. Correct for local use and for tests."""
+
+    def __init__(self) -> None:
+        self._sessions: dict[str, Session] = {}
+
+    def load(self, task_id: str, user_id: str) -> Session | None:
+        session = self._sessions.get(task_id)
+        # A task belongs to the user who started it, whatever the store.
+        if session is None or (session.user_id and user_id and session.user_id != user_id):
+            return None
+        return session
+
+    def save(self, session: Session) -> None:
+        self._sessions[session.task_id] = session
+
+    def delete(self, task_id: str) -> None:
+        self._sessions.pop(task_id, None)
 
 
 class TaskStore:
@@ -158,6 +260,7 @@ class Orchestrator:
         self,
         provider: LLMProvider,
         store: TaskStore | None = None,
+        session_store: SessionStore | None = None,
         *,
         max_steps: int | None = None,
         max_retries: int | None = None,
@@ -170,7 +273,7 @@ class Orchestrator:
         self.page_agent = PageAgent(provider)
         self.tool_discovery = ToolDiscovery(provider)
         self.memory = MemoryAgent(provider)
-        self._sessions: dict[str, Session] = {}
+        self.sessions = session_store or MemorySessionStore()
         # Ids of tasks the user stopped. A cancelled session is dropped
         # immediately, but an in-flight client may still report the result of
         # the action it was running; without this it would be told the task
@@ -180,11 +283,11 @@ class Orchestrator:
 
     # -- session access ---------------------------------------------------
 
-    def get_session(self, task_id: str) -> Session | None:
-        return self._sessions.get(task_id)
+    def get_session(self, task_id: str, user_id: str = "") -> Session | None:
+        return self.sessions.load(task_id, user_id)
 
     def drop_session(self, task_id: str) -> None:
-        self._sessions.pop(task_id, None)
+        self.sessions.delete(task_id)
 
     def _remember_cancelled(self, task_id: str) -> None:
         self._recently_cancelled[task_id] = None
@@ -201,6 +304,7 @@ class Orchestrator:
         message: str,
         page: dict[str, Any],
         favourite: dict[str, Any] | None = None,
+        user_id: str = "",
     ) -> Directive:
         """Begin a browsing task and return the first directive."""
         goal = message
@@ -211,11 +315,12 @@ class Orchestrator:
             task_id=task_id,
             goal=goal,
             user_message=message,
+            user_id=user_id,
             favourite=favourite,
             current_url=str(page.get("url", "")),
         )
-        self._sessions[task_id] = session
         session.state = ANALYZING
+        self.sessions.save(session)
 
         self.store.create_task(
             task_id, message, session.current_url, (favourite or {}).get("id")
@@ -231,9 +336,10 @@ class Orchestrator:
         page: dict[str, Any],
         result: dict[str, Any] | None = None,
         confirmation: bool | None = None,
+        user_id: str = "",
     ) -> Directive:
         """Report an action's outcome and get the next directive."""
-        session = self._sessions.get(task_id)
+        session = self.sessions.load(task_id, user_id)
         if session is None:
             if task_id in self._recently_cancelled:
                 # The client was mid-action when the user pressed Stop.
@@ -290,6 +396,7 @@ class Orchestrator:
             session.pending_action = None
             session.state = EXECUTING
             self.store.update_task(task_id, status=EXECUTING)
+            self.sessions.save(session)
             return Directive(
                 type="action",
                 task_id=task_id,
@@ -320,10 +427,10 @@ class Orchestrator:
 
         return await self._advance(session, page)
 
-    def cancel(self, task_id: str) -> Directive:
+    def cancel(self, task_id: str, user_id: str = "") -> Directive:
         """Stop a task. Idempotent, and never loses history."""
         self._remember_cancelled(task_id)
-        session = self._sessions.get(task_id)
+        session = self.sessions.load(task_id, user_id)
         if session is None:
             self.store.update_task(task_id, status=CANCELLED, completed=True)
             return Directive(
@@ -416,6 +523,7 @@ class Orchestrator:
                 )
             # Re-observe and try again on the next round trip.
             session.state = REPLANNING
+            self.sessions.save(session)
             return Directive(
                 type="action",
                 task_id=session.task_id,
@@ -433,6 +541,7 @@ class Orchestrator:
         if plan.decision.type == "ask":
             session.state = WAITING_CONFIRMATION
             self.store.update_task(session.task_id, status=WAITING_CONFIRMATION)
+            self.sessions.save(session)
             return Directive(
                 type="ask",
                 task_id=session.task_id,
@@ -463,10 +572,12 @@ class Orchestrator:
             session.pending_risk = risk.to_dict()
             session.state = WAITING_CONFIRMATION
             self.store.update_task(session.task_id, status=WAITING_CONFIRMATION)
+            self.sessions.save(session)
             return self._confirm_directive(session, activity=plan.activity)
 
         session.state = EXECUTING
         self.store.update_task(session.task_id, status=EXECUTING)
+        self.sessions.save(session)
         return Directive(
             type="action",
             task_id=session.task_id,
@@ -535,6 +646,8 @@ class Orchestrator:
 
     def _terminal(self, session: Session, state: str, message: str) -> Directive:
         session.state = state
+        # The task is over: its live state is no longer needed by anyone.
+        self.sessions.delete(session.task_id)
         self.store.update_task(
             session.task_id,
             status=state,

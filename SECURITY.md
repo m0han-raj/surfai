@@ -1,8 +1,8 @@
 # Security Policy
 
 SurfAI reads and acts on web pages on your behalf. That makes the browser an attack surface and the
-language model an untrusted decision-maker. This document states the threat model, the controls, and
-— importantly — the limits of those controls.
+language model an untrusted decision-maker. This document states the threat model, the controls, and,
+importantly, the limits of those controls.
 
 ---
 
@@ -41,7 +41,7 @@ this document.
 **The language model is not a security boundary.**
 
 Every control that matters is enforced in deterministic Python that no model output can influence.
-A completely compromised or hallucinating planner must not be able to cause harm — that is the
+A completely compromised or hallucinating planner must not be able to cause harm. That is the
 design requirement, not prompt engineering.
 
 ---
@@ -63,7 +63,7 @@ what looks like a system turn.
 
 ### The defence, in four layers
 
-#### Layer 1 — Structural separation
+#### Layer 1: Structural separation
 
 Page content never enters the system or user role. It is delivered inside a labelled envelope within
 a user turn that re-states its status:
@@ -81,9 +81,9 @@ permissions, or define the assistant's role.
 
 **Envelope forgery is blocked.** A page printing `</WEBPAGE_DATA>` to "close" the block early has
 those tags escaped to `[tag-removed]` before wrapping, and the label itself comes from a fixed
-allowlist — a caller cannot introduce a new envelope type.
+allowlist, so a caller cannot introduce a new envelope type.
 
-#### Layer 2 — Neutralisation
+#### Layer 2: Neutralisation
 
 `app/security/prompt_injection.py` scans untrusted text for eight categories:
 
@@ -104,7 +104,7 @@ surfaced to the user as a security notice in the side panel.
 Patterns are deliberately broad. A false positive costs one redacted phrase in a summary; a false
 negative costs an injected instruction.
 
-#### Layer 3 — Schema validation (decisive)
+#### Layer 3: Schema validation (decisive)
 
 The model cannot express a dangerous action, because the action vocabulary does not contain one:
 
@@ -118,14 +118,14 @@ There is no `EVAL`, no `EXECUTE_SCRIPT`, no way to pass raw JavaScript. Beyond t
   selector, an XPath, or `e2; alert(1)` is rejected by the schema.
 - Only ids the extractor judged **visible and enabled** exist, so the agent cannot reach something a
   human could not click.
-- Unknown fields are rejected outright (`extra="forbid"`) — nothing can be smuggled past the schema
+- Unknown fields are rejected outright (`extra="forbid"`), so nothing can be smuggled past the schema
   hoping something downstream honours it.
 - `NAVIGATE` accepts only absolute `http(s)` URLs. `javascript:`, `data:`, `file:` and `vbscript:`
   are rejected in **both** the backend validator and the in-page executor.
 - Typed values are stripped of control characters, length-capped, and rejected if they contain
   script-like content.
 
-#### Layer 4 — Deterministic risk classification (decisive)
+#### Layer 4: Deterministic risk classification (decisive)
 
 `app/browser/risk.py` decides what requires human confirmation. It is **pure Python over the action
 and the element it targets**, taken from the current snapshot. No model output influences the
@@ -177,7 +177,7 @@ SurfAI **never** executes model-generated code. There is no path from model outp
 
 The content script's executor is a closed `switch` over seven verbs operating on elements resolved
 through its own registry. The worst a fully compromised planner can achieve is clicking a visible
-button — something the user could have done themselves — and even that is gated by Layer 4 when it
+button, something the user could have done themselves, and even that is gated by Layer 4 when it
 matters.
 
 A dedicated test types `<script>window.__pwned = true</script>` into a field and asserts it lands as
@@ -193,7 +193,7 @@ literal text with nothing executed.
 
 - **never** sent to the Chrome extension;
 - **never** written to the database;
-- **never** returned by any endpoint — `/health/llm` reports only *whether* a key is configured;
+- **never** returned by any endpoint. `/health/llm` reports only *whether* a key is configured;
 - **never** committed: `.env` is gitignored and `.env.example` contains no real values.
 
 The extension talks only to the backend. This is the reason the architecture has a backend at all
@@ -203,7 +203,7 @@ for a single-user tool.
 
 Password, hidden, CVV, card-number, OTP and API-key-shaped fields are detected by input type and by
 name/label pattern. Their **values are stripped in the page, before any network call**. The element
-itself is still reported — so the agent can type into a password field under confirmation — but its
+itself is still reported, so the agent can type into a password field under confirmation, but its
 contents are never observable to the model, the backend, or the database.
 
 Card-number-shaped digit runs are redacted from free text as well.
@@ -212,25 +212,56 @@ No passwords are stored by SurfAI, hashed or otherwise, anywhere.
 
 ### Page content
 
-- Full page HTML is never stored or transmitted — only the compact semantic snapshot.
+- Full page HTML is never stored or transmitted, only the compact semantic snapshot.
 - Extracted data is length-capped and kept only for the duration of the task.
-- Task history stores the request, status, URL and per-step action records — not page content.
+- Task history stores the request, status, URL and per-step action records, not page content.
 - With a local model, page content never leaves your machine.
 
 ---
 
-## Authentication and the local-user boundary
+## Authentication
 
-The MVP runs as a **single local user** with no login. `LocalAuthProvider` grants a fixed identity
-to every request.
+Two modes, selected by `AUTH_PROVIDER`. Choosing the wrong one is the single most damaging
+misconfiguration available.
 
-> **This is correct for a backend bound to `127.0.0.1` on your own machine, and wrong for a shared
-> deployment.** Anyone who can reach the port is that user.
+### `local` (default)
 
-`docker-compose.yml` binds both the backend and PostgreSQL to `127.0.0.1` for this reason. Before
-exposing SurfAI to a network you must implement a real `AuthProvider`, add per-user isolation
-checks (the data model and queries are already user-scoped), change the default database password,
-and restrict `CORS_ALLOW_ORIGINS` to specific extension ids.
+A fixed identity for every request. No login, and therefore no login to bypass.
+
+> **Correct for a backend bound to `127.0.0.1` on your own machine. Wrong for anything reachable
+> from a network:** whoever reaches the port is the user. `docker-compose.yml` binds both the
+> backend and PostgreSQL to `127.0.0.1` for this reason, and the backend logs a warning at startup
+> if it finds `local` outside development.
+
+### `google`
+
+Every request must carry a Google OAuth bearer token, which is verified **with Google** on each
+cache miss. Specifically:
+
+- the token's audience is checked against `GOOGLE_CLIENT_ID`. Without that check, a token issued to
+  any other Google application would authenticate here;
+- identity is the token's `sub`, not its email. Emails can be reassigned; a stable subject cannot,
+  so user data never keys off something that can move between people;
+- `ALLOWED_EMAILS`, when set, is enforced after verification, so it is a real check rather than a
+  UI nicety;
+- verification **fails closed**. A token Google will not confirm, a token with no subject, a
+  malformed header, and an unreachable Google all yield 401 rather than falling open;
+- results are cached for at most five minutes, keyed by a SHA-256 of the token rather than the
+  token, so a dump of the cache hands out nothing usable. Revocation therefore takes up to five
+  minutes to take effect.
+
+`/health` stays open so a monitor can reach it. Every data endpoint requires a verified user.
+
+### Per-user isolation
+
+Favourites, tasks and agent sessions are scoped by user id at the repository layer, and a task can
+only be continued by the user who started it: knowing a task id is not enough to drive someone
+else's agent. These are covered by tests that attempt the cross-user access directly rather than
+inspecting queries.
+
+Before exposing SurfAI to a network: set `AUTH_PROVIDER=google`, change the default database
+password, restrict `CORS_ALLOW_ORIGINS` to your extension id, and confirm an unauthenticated
+request to `/api/favourites` returns 401. See [deploy/README.md](deploy/README.md).
 
 ---
 
@@ -244,7 +275,7 @@ and restrict `CORS_ALLOW_ORIGINS` to specific extension ids.
 | `activeTab` | Access the current tab only when the user invokes SurfAI |
 | `tabs` | Read the active tab's URL/title, detect navigation |
 
-**SurfAI does not request `<all_urls>`.** `host_permissions` covers only `localhost:8000` — its own
+**SurfAI does not request `<all_urls>`.** `host_permissions` covers only localhost, its own
 backend. The content script is injected on demand under `activeTab` rather than declared for every
 site, so it does not run on pages where you are not using SurfAI.
 
@@ -281,14 +312,14 @@ Stated plainly, because a security document that only lists strengths is not use
 5. **No sandboxing between sites.** A task runs in whatever tab is active, with that page's session.
    Do not run SurfAI on hostile pages while logged into sensitive accounts.
 6. **Local mode has no authentication.** See the boundary note above.
-7. **Session state is in memory.** Restarting the backend loses in-flight tasks; this is a
-   robustness limitation, not a security one, but it affects availability.
+7. **No rate limiting.** A signed-in user can start as many tasks as they like, and each step
+   costs model tokens. There is no quota or per-user cost cap.
 
 ---
 
 ## Security checklist before deploying beyond localhost
 
-- [ ] Implement a real `AuthProvider` and enforce per-user isolation
+- [ ] Set `AUTH_PROVIDER=google` and confirm `/api/favourites` returns 401 unauthenticated
 - [ ] Change `POSTGRES_PASSWORD` from the default
 - [ ] Restrict `CORS_ALLOW_ORIGINS` to specific extension ids
 - [ ] Terminate TLS in front of the backend

@@ -23,6 +23,24 @@ logging.basicConfig(
 logger = logging.getLogger("surfai")
 
 
+def _purge_stale_sessions() -> None:
+    """Drop agent state left behind by tasks nobody finished.
+
+    A user who closes the side panel mid-task leaves a row; nothing else reaps
+    them. Local runs keep sessions in memory and have nothing to purge.
+    """
+    if settings.is_local_auth:
+        return
+    try:
+        from app.database.repositories.sessions import DatabaseSessionStore
+
+        removed = DatabaseSessionStore().purge_stale(settings.task_timeout_s * 4)
+        if removed:
+            logger.info("Purged %d stale agent session(s)", removed)
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not purge stale agent sessions")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start up without hard dependencies.
@@ -37,10 +55,20 @@ async def lifespan(app: FastAPI):
             logger.info("Database ready")
         except Exception:
             logger.exception("Could not ensure database schema; run `alembic upgrade head`")
+        _purge_stale_sessions()
     else:
         logger.warning("Database unavailable at startup (%s); /health will report degraded", error)
 
     logger.info("LLM endpoint: %s (model %s)", settings.llm_base_url, settings.llm_model)
+
+    if settings.is_local_auth and settings.environment != "development":
+        # Loud, because it is the difference between a personal tool and an
+        # open door. See SECURITY.md.
+        logger.warning(
+            "AUTH_PROVIDER=local outside development: every request is treated as "
+            "the same user. Do not expose this backend to a network."
+        )
+
     yield
     await get_provider().aclose()
 

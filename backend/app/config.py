@@ -58,8 +58,15 @@ class Settings(BaseSettings):
     max_extract_chars: int = 4000
 
     # --- Security --------------------------------------------------------
+    # `local` is a single unauthenticated user, correct only for a backend bound
+    # to localhost. `google` verifies a bearer token on every request and is the
+    # only supported mode for a backend reachable from the network.
     auth_provider: str = "local"
     local_user_id: str = "local-user"
+    google_client_id: str = ""
+    # Optional allowlist. Empty means any Google account that authenticates with
+    # our client id is accepted; set it to run a private instance.
+    allowed_emails: str = ""
     cors_allow_origins: str = "chrome-extension://*"
     # Risk categories that must never auto-execute even if reclassified.
     always_confirm_categories: str = "PURCHASE,PAYMENT,DELETE,ACCOUNT_CHANGES"
@@ -72,6 +79,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
+
+    @property
+    def allowed_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
+    @property
+    def is_local_auth(self) -> bool:
+        return self.auth_provider.lower() == "local"
 
     @property
     def always_confirm_set(self) -> set[str]:

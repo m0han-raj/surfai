@@ -153,6 +153,7 @@ async def chat(
             message=payload.message,
             page=page,
             favourite=favourite,
+            user_id=user.id,
         )
     except LLMUnavailableError as exc:
         return _error(f"I could not reach the language model. ({exc})")

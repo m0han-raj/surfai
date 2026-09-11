@@ -57,7 +57,7 @@ deterministically, which also makes it the fastest way to reproduce an agent-loo
 ## Before you open a pull request
 
 ```bash
-cd backend && pytest -q && ruff check app tests migrations
+cd backend && pytest -q && ruff check app tests migrations tools
 cd extension && npm test && npm run typecheck && npm run build
 ```
 
@@ -78,7 +78,7 @@ model produced, it must pass through that function first.
 
 The vocabulary is seven verbs. Adding `EVAL`, `EXECUTE_SCRIPT`, `SET_HTML`, or an action that
 accepts a CSS selector or raw JavaScript will be rejected. If you believe a task genuinely needs
-one, open an issue and describe the task — there is almost always a way to express it with the
+one, open an issue and describe the task. There is almost always a way to express it with the
 existing verbs.
 
 ### 3. Never let model output influence risk classification
@@ -89,8 +89,8 @@ A page can say anything; the classifier must not listen.
 
 ### 4. Never weaken the confirmation gate to make a flow smoother
 
-If a task is annoying because it asks too often, fix the *classifier's precision* with a test —
-do not widen the auto-execute path.
+If a task is annoying because it asks too often, fix the *classifier's precision* with a test.
+Do not widen the auto-execute path.
 
 ### 5. Never capture credentials
 
@@ -109,20 +109,20 @@ executor should come with tests demonstrating the property it preserves.
 
 ## Code style
 
-**Python** — Ruff (`line-length = 100`, py312 target). Type hints on public functions. Pydantic for
+**Python.** Ruff (`line-length = 100`, py312 target). Type hints on public functions. Pydantic for
 anything crossing a boundary. `ruff check app tests migrations` must be clean.
 
-**TypeScript** — `strict: true`, `noUnusedLocals`, `noUnusedParameters`. `npm run typecheck` must be
+**TypeScript.** `strict: true`, `noUnusedLocals`, `noUnusedParameters`. `npm run typecheck` must be
 clean. Prefer explicit types on exported functions.
 
-**Comments** — explain *why*, not *what*. A comment that restates the code is noise; one that
+**Comments.** Explain *why*, not *what*. A comment that restates the code is noise; one that
 records a non-obvious constraint is valuable:
 
 ```python
 # `[ _-]?` rather than `[_-]?`: real labels read "Card number" and "API Key".
 ```
 
-**Naming** — match the surrounding code. `snake_case` in Python, `camelCase` in TypeScript,
+**Naming.** Match the surrounding code. `snake_case` in Python, `camelCase` in TypeScript,
 `SCREAMING_SNAKE` for constants in both.
 
 ---
@@ -135,12 +135,12 @@ The interface is a professional developer tool, and the constraints are firm:
   notifications. Use Lucide icons, SVG, or a text label.
 - **No decoration.** No gradients, neon, glassmorphism, or animation beyond a loading spinner.
 - **Accessible by default.** Semantic HTML, keyboard navigation, visible focus, ARIA labels on
-  icon-only controls, sufficient contrast. Never convey state by colour alone — pair it with an icon
+  icon-only controls, sufficient contrast. Never convey state by colour alone; pair it with an icon
   or text.
 - **Tokens, not hard-coded colours.** Everything comes from `src/styles/theme.css`, and every token
   is defined for both light and dark.
-- **Never expose chain-of-thought.** The activity log shows what SurfAI *did* — "Reading page",
-  "Applying price filter" — not how it reasoned.
+- **Never expose chain-of-thought.** The activity log shows what SurfAI *did*
+  ("Reading page", "Applying filter"), not how it reasoned.
 
 ---
 
@@ -151,7 +151,7 @@ A behaviour change needs a test. A bug fix needs a test that fails before it and
 Test the **property**, not the implementation. `test_injected_page_text_cannot_lower_risk` stays
 meaningful when the classifier is rewritten; a test asserting a specific regex does not.
 
-The demo pages in `demo/` are part of the test surface — `test_demo_pages.py` and
+The demo pages in `demo/` are part of the test surface: `test_demo_pages.py` and
 `demo-pages.test.ts` load them from disk. If you change a demo page, run both suites.
 
 When adding an agent-loop test, script the fake LLM with `fake_llm.push(...)`. The fake validates
@@ -188,8 +188,8 @@ fallback used in development and tests.
 
 ## Commits and pull requests
 
-Write commit subjects in the imperative mood, explaining the change and — when it is not obvious —
-why:
+Write commit subjects in the imperative mood, explaining the change and, when it is not
+obvious, why:
 
 ```
 Reject off-site NAVIGATE without confirmation
@@ -208,8 +208,8 @@ look at closely. If it touches the security layer, say so explicitly.
 - Broaden `element-detector.ts` to recognise more custom widget patterns
 - Add heuristics to `tool_discovery.py` for capability shapes not yet covered
 - Improve `extractRepeatedItems` for layouts that currently fall back to page text
-- Add injection payload shapes to `prompt_injection.py` — **with tests, and check the benign corpus
-  still passes**
+- Add injection payload shapes to `prompt_injection.py` (**with tests, and check the benign
+  corpus still passes**)
 - Dark-mode polish; the tokens exist and are complete
 - Add a demo site exercising a pattern the current three do not
 
@@ -217,5 +217,5 @@ look at closely. If it touches the security layer, say so explicitly.
 
 ## Questions
 
-Open an issue. For anything security-sensitive, use a private advisory instead — see
+Open an issue. For anything security-sensitive, use a private advisory instead; see
 [SECURITY.md](SECURITY.md).

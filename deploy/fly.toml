@@ -1,0 +1,56 @@
+# Fly.io configuration for the SurfAI backend.
+#
+#   fly launch --no-deploy --copy-config --config deploy/fly.toml
+#   fly postgres create --name surfai-db
+#   fly postgres attach surfai-db          # sets DATABASE_URL
+#   fly secrets set AUTH_PROVIDER=google GOOGLE_CLIENT_ID=... LLM_API_KEY=...
+#   fly deploy --config deploy/fly.toml
+#
+# Secrets are set with `fly secrets`, never in this file. Only non-sensitive
+# defaults live here.
+
+app = "surfai"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../backend/Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  LOG_LEVEL = "INFO"
+  # Google OAuth. The client id itself is not a secret, but it is set as a
+  # secret anyway so one command configures the whole auth story.
+  AUTH_PROVIDER = "google"
+  # Tighten this to your published extension id once you have one:
+  #   CORS_ALLOW_ORIGINS = "chrome-extension://abcdefghijklmnop..."
+  CORS_ALLOW_ORIGINS = "chrome-extension://*"
+  MAX_AGENT_STEPS = "15"
+  ALWAYS_CONFIRM_CATEGORIES = "PURCHASE,PAYMENT,DELETE,ACCOUNT_CHANGES"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # Agent state lives in PostgreSQL rather than in memory, so a request may be
+  # served by a different machine than the one that started the task. Without
+  # that, this would have to be pinned to one machine.
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+[[http_service.checks]]
+  grace_period = "20s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/health"
+
+[[vm]]
+  # The backend is IO-bound: it waits on the model and on PostgreSQL. Inference
+  # happens elsewhere, so this does not need to be large.
+  size = "shared-cpu-1x"
+  memory = "512mb"
