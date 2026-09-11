@@ -130,3 +130,24 @@ def check_connection() -> tuple[bool, str | None]:
     except Exception as exc:  # noqa: BLE001 - surfaced as a health string only
         logger.warning("Database health check failed: %s", exc)
         return False, type(exc).__name__
+
+
+def missing_tables() -> list[str]:
+    """Tables the application needs that the database does not have.
+
+    Connecting successfully says nothing about whether migrations have run. A
+    deployment pointed at an empty database reports itself perfectly healthy
+    and then fails on every request, which is a slow thing to diagnose from
+    the outside; this makes it visible in `/health`.
+
+    An unreachable database returns nothing rather than listing every table:
+    the connection check already reports that, and duplicating it here would
+    read as two separate faults.
+    """
+    from sqlalchemy import inspect
+
+    try:
+        present = set(inspect(get_engine()).get_table_names())
+    except Exception:  # noqa: BLE001 - reported by check_connection instead
+        return []
+    return sorted(set(Base.metadata.tables) - present)

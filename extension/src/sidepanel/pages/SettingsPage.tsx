@@ -61,6 +61,11 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  // Connecting says nothing about whether the migrations have run, and a
+  // deployment pointed at an empty database otherwise looks perfectly healthy
+  // right up until the first request fails.
+  const missingTables = health?.database.missing_tables ?? [];
+
   return (
     <section className="section">
       <h2 className="section__header section__header--static">
@@ -82,7 +87,8 @@ export default function SettingsPage() {
             }
           />
           <p className="field__hint">
-            Where the SurfAI API is running. Default: http://localhost:8000
+            Where the SurfAI API is running. Found automatically on first run;
+            change it to point at a hosted backend.
           </p>
         </div>
 
@@ -207,11 +213,13 @@ export default function SettingsPage() {
         />
         <StatusRow
           label="Database"
-          ok={Boolean(health?.database.connected)}
+          ok={Boolean(health?.database.connected) && !missingTables.length}
           detail={
-            health?.database.connected
-              ? 'Connected'
-              : (health?.database.error ?? 'Not connected')
+            !health?.database.connected
+              ? (health?.database.error ?? 'Not connected')
+              : missingTables.length
+                ? `Connected, but ${missingTables.length} table(s) are missing. Run the migrations.`
+                : 'Connected'
           }
         />
         <StatusRow

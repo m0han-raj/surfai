@@ -148,7 +148,7 @@ export interface HealthResponse {
   status: string;
   app: string;
   environment: string;
-  database: { connected: boolean; error: string | null };
+  database: { connected: boolean; error: string | null; missing_tables?: string[] };
   auth_provider: string;
   agent: { max_steps: number; max_retries: number; action_timeout_ms: number };
 }

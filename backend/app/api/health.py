@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.config import settings
-from app.database.database import check_connection
+from app.database.database import check_connection, missing_tables
 from app.llm.openai_compatible import get_provider
 
 router = APIRouter(tags=["health"])
@@ -19,11 +19,18 @@ async def health() -> dict:
     rather than a generic connection error.
     """
     db_ok, db_error = check_connection()
+    absent = missing_tables() if db_ok else []
     return {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if db_ok and not absent else "degraded",
         "app": settings.app_name,
         "environment": settings.environment,
-        "database": {"connected": db_ok, "error": db_error},
+        "database": {
+            "connected": db_ok,
+            "error": db_error,
+            # Empty once migrations have run. Anything listed here means
+            # requests touching that table will fail.
+            "missing_tables": absent,
+        },
         "auth_provider": settings.auth_provider,
         "agent": {
             "max_steps": settings.max_agent_steps,

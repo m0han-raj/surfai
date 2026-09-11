@@ -31,6 +31,53 @@ def test_health_reports_database_connectivity(client) -> None:
     assert body["agent"]["max_steps"] >= 1
 
 
+def test_health_reports_a_database_that_is_missing_its_tables(client, monkeypatch) -> None:
+    """Connecting is not the same as being migrated.
+
+    A deployment pointed at an empty database connects fine and then fails on
+    every request. Reporting "ok" there sends whoever is debugging it looking
+    in the wrong place entirely.
+    """
+    from app.api import health as health_api
+
+    monkeypatch.setattr(health_api, "missing_tables", lambda: ["tasks", "favourites"])
+
+    body = client.get("/health").json()
+    assert body["status"] == "degraded"
+    assert body["database"]["connected"] is True
+    assert body["database"]["missing_tables"] == ["tasks", "favourites"]
+
+
+def test_health_lists_no_missing_tables_once_migrated(client) -> None:
+    assert client.get("/health").json()["database"]["missing_tables"] == []
+
+
+def test_missing_tables_names_a_table_that_is_actually_absent(database) -> None:
+    """Against a real database, not a stub: the inspection has to work."""
+    from sqlalchemy import text
+
+    from app.database.database import get_engine, missing_tables
+
+    assert missing_tables() == []
+
+    with get_engine().begin() as connection:
+        connection.execute(text("DROP TABLE task_actions"))
+
+    assert missing_tables() == ["task_actions"]
+
+
+def test_missing_tables_is_silent_when_the_database_is_unreachable() -> None:
+    """The connection check already reports that; two faults read as two bugs."""
+    from app.database import database
+
+    original = database.get_engine
+    try:
+        database.get_engine = lambda: (_ for _ in ()).throw(RuntimeError("down"))
+        assert database.missing_tables() == []
+    finally:
+        database.get_engine = original
+
+
 def test_llm_health_never_leaks_the_api_key(client) -> None:
     body = client.get("/health/llm").json()
     assert "api_key" not in body
