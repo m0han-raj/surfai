@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentState, ChatMessage, Directive, MessageStep } from '../types/agent';
+import { withContextNotice } from './contextNotice';
 import { AgentRunner } from '../services/agent-runner';
 import { getSettings } from '../services/storage';
 
@@ -36,6 +37,8 @@ export function useAgent() {
   const optionsRef = useRef({ maxElements: 60, actionTimeoutMs: 10_000 });
   /** Id of the assistant placeholder currently collecting steps. */
   const pendingIdRef = useRef<string | null>(null);
+  /** The page this conversation is currently about: where the last turn was sent. */
+  const anchorRef = useRef('');
 
   useEffect(() => {
     void getSettings().then((settings) => {
@@ -158,11 +161,18 @@ export function useAgent() {
   }, [addStep, settlePending]);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, domain?: string) => {
       const history = messages
-        .filter((m) => !m.pending && m.content)
+        // Notices are SurfAI talking about the conversation, not in it, and
+        // the API accepts only the two real roles.
+        .filter((m) => m.role !== 'notice' && !m.pending && m.content)
         .slice(-HISTORY_TURNS)
-        .map((m) => ({ role: m.role, content: m.content }));
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+      // The question is asked of whatever is in front of the user now, so
+      // that page becomes what the conversation is about. Any notice already
+      // standing is left above the question, where it explains the change.
+      anchorRef.current = domain ?? anchorRef.current;
 
       setMessages((current) => [
         ...current,
@@ -206,9 +216,20 @@ export function useAgent() {
   }, []);
 
   const clear = useCallback(() => {
+    anchorRef.current = '';
     pendingIdRef.current = null;
     setMessages([]);
     setState('IDLE');
+  }, []);
+
+  /**
+   * Tell the panel which page is in front of the user now.
+   *
+   * Called on every tab switch and navigation. Cheap and idempotent: it
+   * returns the same transcript unless the notice actually needs to change.
+   */
+  const noteCurrentPage = useCallback((domain: string | undefined) => {
+    setMessages((current) => withContextNotice(current, domain, anchorRef.current, Date.now()));
   }, []);
 
   return {
@@ -217,6 +238,7 @@ export function useAgent() {
     running,
     pendingConfirmation,
     send,
+    noteCurrentPage,
     runFavourite,
     stop,
     answerConfirmation,

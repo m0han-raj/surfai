@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ChevronRight, ShieldAlert, AlertCircle, Loader2 } from 'lucide-react';
+import { ChevronRight, ShieldAlert, AlertCircle, Loader2, ArrowRightLeft } from 'lucide-react';
 import type { ChatMessage } from '../../types/agent';
+import Markdown from './Markdown';
 
 interface MessageProps {
   message: ChatMessage;
@@ -18,6 +19,18 @@ export default function Message({ message }: MessageProps) {
   const [stepsOpen, setStepsOpen] = useState(false);
   const isUser = message.role === 'user';
   const steps = message.steps ?? [];
+
+  // SurfAI talking about the conversation rather than in it: the page under
+  // it changed. Centred and quiet, so it reads as a marker in the thread
+  // rather than a turn someone took.
+  if (message.role === 'notice') {
+    return (
+      <p className="msg__context" role="note">
+        <ArrowRightLeft size={11} aria-hidden="true" />
+        <span>{message.content}</span>
+      </p>
+    );
+  }
 
   if (isUser) {
     return (
@@ -42,7 +55,9 @@ export default function Message({ message }: MessageProps) {
           {message.error && (
             <AlertCircle size={13} aria-hidden="true" className="msg__error-icon" />
           )}
-          {message.content}
+          {/* An error is our own sentence, not model output, so it needs no
+              parsing and should not be reshaped by a stray asterisk. */}
+          {message.error ? message.content : <Markdown text={message.content} />}
         </div>
       )}
 

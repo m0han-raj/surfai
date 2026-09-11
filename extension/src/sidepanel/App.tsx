@@ -72,11 +72,25 @@ export default function App() {
   const handleSend = useCallback(
     async (message: string) => {
       setView('chat');
-      await agent.send(message);
+      // The domain the question is being asked about, so a later switch knows
+      // what it is a switch away from.
+      await agent.send(message, page.insight?.domain ?? hostOf(page.tab.url));
       void page.refresh();
     },
     [agent, page],
   );
+
+  // Follow the active tab. usePageContext already re-reads on tab switch and
+  // navigation; this turns that into something the conversation says out loud.
+  const currentDomain = page.insight?.domain ?? hostOf(page.tab.url);
+  const { noteCurrentPage } = agent;
+  useEffect(() => {
+    // While a read is in flight the insight still describes the page we are
+    // leaving, so hold off rather than announce a domain that is already
+    // stale. `agent` itself is a fresh object every render; the callback is
+    // the stable half of it.
+    noteCurrentPage(page.loading ? undefined : currentDomain);
+  }, [noteCurrentPage, currentDomain, page.loading]);
 
   const handleRunFavourite = useCallback(
     async (favourite: Favourite) => {

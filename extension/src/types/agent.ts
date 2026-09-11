@@ -44,9 +44,15 @@ export interface MessageStep {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  /**
+   * `notice` is SurfAI speaking about the conversation rather than in it: the
+   * page changed underneath. It is never sent back to the model as history.
+   */
+  role: 'user' | 'assistant' | 'notice';
   content: string;
   at: number;
+  /** The page a notice refers to. */
+  domain?: string;
   /** Non-fatal notices, such as a prompt-injection warning. */
   warnings?: string[];
   error?: boolean;
