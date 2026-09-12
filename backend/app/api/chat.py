@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.agents.assistant import Assistant
 from app.agents.memory_agent import MemoryAgent
 from app.agents.orchestrator import COMPLETED, FAILED, Orchestrator
+from app.agents.results import ResultItem, select_results
 from app.api.deps import get_orchestrator
 from app.api.schemas import ChatRequest, DirectiveResponse
 from app.api.tasks import _merge_page
@@ -106,6 +107,10 @@ async def _chat(
             intent=intent.intent,
             warnings=reply.warnings,
             used_page=reply.used_page,
+            # A list page you are already on, rather than one SurfAI searched.
+            # Nothing was searched for, so nothing is selected: the page lists
+            # these, and SurfAI shows what it lists.
+            results=[item.to_dict() for item in _page_results(page, reply.used_page)],
         )
 
     # -- list favourites ---------------------------------------------------
@@ -193,6 +198,21 @@ async def _chat(
         if favourite.get("url") and not _same_page(page.get("url", ""), favourite["url"]):
             data["favourite_navigation"] = favourite["url"]
     return data
+
+
+def _page_results(page: dict, used_page: bool) -> list[ResultItem]:
+    """Cards for a result list on the page the user is already looking at.
+
+    Only when the answer actually consulted the page: cards are an answer to a
+    question about the page, and "write me a haiku" is not one, however many
+    products happen to be behind the panel at the time.
+    """
+    if not used_page:
+        return []
+    items = page.get("items")
+    if not isinstance(items, list):
+        return []
+    return select_results(items, list(range(len(items))))
 
 
 def _record(

@@ -73,6 +73,12 @@ specific result. Include concrete details from the page: names, values, counts,
 whatever the user actually asked about.
 8. `activity` is one short present-tense phrase shown to the user, such as \
 "Applying filter" or "Reading results". No internal reasoning.
+9. When a TOOL_RESULT carries an `items` list and you are answering, set \
+`item_indices` to the indices of the items that answer the goal, best first, and \
+leave it empty if none do. The user is shown each item exactly as the page printed \
+it, so never copy a title, price or link into your message: restating one is how a \
+wrong price reaches them. Describe what you found and let the items speak for \
+themselves.
 
 Reply with a single JSON object and nothing else."""
 

@@ -14,6 +14,7 @@
  */
 
 import type { SemanticElement, SemanticPage } from '@shared/types';
+import { extractResultItems } from './result-items';
 import {
   STRUCTURAL_SELECTOR,
   classify,
@@ -306,6 +307,11 @@ export function capturePage(options: SnapshotOptions = {}): SemanticPage {
     domain: window.location.hostname.toLowerCase(),
     title: document.title || visibleText(document.querySelector('h1') ?? document.body, 80),
     summary: extractSummary(root, maxTextChars),
+    // The page's result list, if it has one. Read here so a question about
+    // a list page can be answered with cards without acting on the page
+    // first. Capped tighter than the extractor's own limit: this rides
+    // along with every snapshot, including the agent loop's.
+    items: extractResultItems().slice(0, 12),
     elements,
     truncated: Math.max(0, candidates.length - elements.length),
     capturedAt: Date.now(),

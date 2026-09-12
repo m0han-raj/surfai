@@ -13,7 +13,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentState, ChatMessage, Directive, MessageStep } from '../types/agent';
+import type {
+  AgentState,
+  ChatMessage,
+  Directive,
+  MessageStep,
+  ResultItem,
+} from '../types/agent';
 import { withContextNotice } from './contextNotice';
 import { AgentRunner } from '../services/agent-runner';
 import { getSettings } from '../services/storage';
@@ -93,7 +99,10 @@ export function useAgent() {
 
   /** Replace the placeholder with the final reply, keeping its steps. */
   const settlePending = useCallback(
-    (content: string, options: { error?: boolean; warnings?: string[] } = {}) => {
+    (
+      content: string,
+      options: { error?: boolean; warnings?: string[]; results?: ResultItem[] } = {},
+    ) => {
       const id = pendingIdRef.current;
       pendingIdRef.current = null;
 
@@ -107,6 +116,7 @@ export function useAgent() {
                   pending: false,
                   error: options.error,
                   warnings: options.warnings?.length ? options.warnings : undefined,
+                  results: options.results?.length ? options.results : undefined,
                   steps: (message.steps ?? []).map((step) =>
                     step.status === 'running' ? { ...step, status: 'done' as const } : step,
                   ),
@@ -124,6 +134,7 @@ export function useAgent() {
             at: Date.now(),
             error: options.error,
             warnings: options.warnings?.length ? options.warnings : undefined,
+            results: options.results?.length ? options.results : undefined,
           },
         ];
       });
@@ -155,6 +166,7 @@ export function useAgent() {
           settlePending(directive.message || 'Done.', {
             error: directive.type === 'error' && directive.state !== 'CANCELLED',
             warnings: directive.warnings,
+            results: directive.results,
           });
         },
 

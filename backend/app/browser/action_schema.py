@@ -153,6 +153,10 @@ class PlannerDecision(BaseModel):
         max_length=120,
         description="Short user-facing status line, e.g. 'Applying price filter'.",
     )
+    # Indices into the results extracted from the page. The planner chooses
+    # which ones answer the goal; it never restates their fields, so it cannot
+    # invent a price. Empty means none matched, which is a real answer.
+    item_indices: list[int] | None = Field(default=None, max_length=40)
 
     @model_validator(mode="after")
     def _check_shape(self) -> PlannerDecision:
@@ -171,6 +175,14 @@ PLANNER_DECISION_SCHEMA: dict[str, Any] = {
     "properties": {
         "type": {"type": "string", "enum": ["action", "answer", "ask"]},
         "activity": {"type": "string"},
+        "item_indices": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "description": (
+                "Indices of the extracted results that answer the goal, best first. "
+                "Never restate their fields; the page's own values are shown."
+            ),
+        },
         "message": {"type": "string"},
         "action": {
             "type": "object",

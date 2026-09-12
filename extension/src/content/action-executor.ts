@@ -17,6 +17,7 @@
 import type { ActionResult, ActionType, BrowserAction } from '@shared/action-schema';
 import { resolveElement } from './semantic-dom';
 import { observePageChange } from './page-observer';
+import { extractResultItems } from './result-items';
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
 const SETTLE_MS = 400;
@@ -263,7 +264,7 @@ async function doExtract(action: BrowserAction): Promise<ActionResult> {
  * answer specific.
  */
 export function extractPageData(): Record<string, unknown> {
-  const items = extractRepeatedItems();
+  const items = extractResultItems();
   const headings = Array.from(document.querySelectorAll('h1,h2,h3'))
     .filter((h) => (h.textContent || '').trim())
     .slice(0, 15)
@@ -282,59 +283,6 @@ export function extractPageData(): Record<string, unknown> {
 function mainText(maxChars = 4000): string {
   const main = document.querySelector('main, [role="main"], article') ?? document.body;
   return (main?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
-}
-
-function extractRepeatedItems(): Array<Record<string, string>> {
-  const candidates = document.querySelectorAll(
-    '[data-testid*="card" i],[class*="card" i],[class*="product" i],[class*="result" i],' +
-      '[class*="item" i],[class*="job" i],[class*="listing" i],article,li',
-  );
-
-  // Group by parent: a real result list shares one container.
-  const groups = new Map<Element, Element[]>();
-  for (const element of Array.from(candidates)) {
-    const parent = element.parentElement;
-    if (!parent) continue;
-    const group = groups.get(parent) ?? [];
-    group.push(element);
-    groups.set(parent, group);
-  }
-
-  let best: Element[] = [];
-  for (const group of groups.values()) {
-    const visible = group.filter((el) => {
-      const rect = (el as HTMLElement).getBoundingClientRect();
-      // Height rules out tiny chips and badges -- but only when layout has
-      // actually run. A zero height means "not measured", not "too small".
-      const bigEnough = rect.height === 0 || rect.height > 30;
-      return bigEnough && (el.textContent || '').trim().length > 20;
-    });
-    if (visible.length >= 2 && visible.length > best.length) best = visible;
-  }
-
-  return best.slice(0, 40).map((element) => {
-    const record: Record<string, string> = {};
-    const heading = element.querySelector('h1,h2,h3,h4,[class*="title" i],[class*="name" i]');
-    const title = (heading?.textContent || '').replace(/\s+/g, ' ').trim();
-    const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
-
-    record.title = (title || text).slice(0, 150);
-
-    const price = /(?:₹|rs\.?|\$|€|£)\s?[\d,]+(?:\.\d{1,2})?/i.exec(text);
-    if (price) record.price = price[0].trim();
-
-    const link = element.querySelector('a[href]')?.getAttribute('href');
-    if (link) {
-      try {
-        record.url = new URL(link, window.location.href).href;
-      } catch {
-        record.url = link;
-      }
-    }
-
-    if (!title && text) record.text = text.slice(0, 300);
-    return record;
-  });
 }
 
 async function doWait(action: BrowserAction): Promise<ActionResult> {

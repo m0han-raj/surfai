@@ -67,6 +67,9 @@ class DirectiveResponse(BaseModel):
     # Where this turn was recorded. The panel sends it back on the next turn
     # so the exchange joins the same thread.
     conversation_id: str | None = None
+    # Result cards. Every field is copied from the page; the model only ever
+    # chose which items to show, so a card cannot carry an invented price.
+    results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FavouriteCreate(BaseModel):

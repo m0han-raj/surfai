@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronRight, ShieldAlert, AlertCircle, Loader2, ArrowRightLeft } from 'lucide-react';
 import type { ChatMessage } from '../../types/agent';
 import Markdown from './Markdown';
+import ResultCards from './ResultCards';
 
 interface MessageProps {
   message: ChatMessage;
@@ -60,6 +61,8 @@ export default function Message({ message }: MessageProps) {
           {message.error ? message.content : <Markdown text={message.content} />}
         </div>
       )}
+
+      {message.results?.length ? <ResultCards items={message.results} /> : null}
 
       {steps.length > 0 && (
         <div className="steps">

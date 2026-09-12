@@ -59,6 +59,15 @@ export interface SemanticElement {
   level?: number;
 }
 
+/** One row of a page's result list, as the page printed it. */
+export interface ResultItem {
+  title: string;
+  price?: string;
+  image?: string;
+  url?: string;
+  meta?: string[];
+}
+
 export interface SemanticPage {
   url: string;
   domain: string;
@@ -68,6 +77,13 @@ export interface SemanticPage {
   elements: SemanticElement[];
   /** Number of elements dropped by the budget, for transparency. */
   truncated: number;
+  /**
+   * The page's result list, if it has one.
+   *
+   * Separate from `elements`, which is what the agent can act on. These are
+   * what the page is showing, and they are what the panel renders as cards.
+   */
+  items?: ResultItem[];
   capturedAt: number;
 }
 

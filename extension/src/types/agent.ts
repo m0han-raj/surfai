@@ -7,6 +7,20 @@ export { AGENT_STATES, TERMINAL_STATES } from '@shared/types';
 /** What the backend tells the extension to do next. */
 export type DirectiveType = 'action' | 'confirm' | 'answer' | 'ask' | 'error';
 
+/**
+ * One result the page listed, as the page printed it.
+ *
+ * Never model-authored: the model chose which items to show, by index, and
+ * every field here was copied out of the DOM.
+ */
+export interface ResultItem {
+  title: string;
+  price?: string | null;
+  image?: string | null;
+  url?: string | null;
+  meta?: string[];
+}
+
 export interface Directive {
   type: DirectiveType;
   task_id: string;
@@ -26,6 +40,8 @@ export interface Directive {
   favourite_navigation?: string;
   /** Where this turn was stored; sent back on the next turn to stay in thread. */
   conversation_id?: string | null;
+  /** Cards to render under the reply. */
+  results?: ResultItem[];
 }
 
 /** One line in the Agent Activity log. */
@@ -62,4 +78,6 @@ export interface ChatMessage {
   steps?: MessageStep[];
   /** The reply is still being produced; renders as a live status line. */
   pending?: boolean;
+  /** Results found on the page, shown as cards under the reply. */
+  results?: ResultItem[];
 }

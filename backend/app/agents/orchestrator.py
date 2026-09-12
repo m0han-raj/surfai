@@ -29,6 +29,7 @@ from typing import Any
 from app.agents.memory_agent import MemoryAgent
 from app.agents.page_agent import PageAgent
 from app.agents.planner import Planner, PlannerContext, PlannerError
+from app.agents.results import ResultItem, select_results
 from app.agents.tool_discovery import ToolDiscovery
 from app.browser.action_schema import BrowserAction
 from app.browser.risk import classify as classify_risk
@@ -73,6 +74,8 @@ class Directive:
     message: str = ""
     data: Any = None
     warnings: list[str] = field(default_factory=list)
+    #: Cards for the panel to render, with every field as the page printed it.
+    results: list[ResultItem] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +90,7 @@ class Directive:
             "message": self.message,
             "data": self.data,
             "warnings": self.warnings,
+            "results": [item.to_dict() for item in self.results],
         }
 
 
@@ -113,6 +117,11 @@ class Session:
     tools: list[dict[str, Any]] = field(default_factory=list)
     favourite: dict[str, Any] | None = None
     extracted: list[str] = field(default_factory=list)
+    # The most recent extraction's items, kept structured. `extracted` is what
+    # the model reads; this is what the panel renders, and the two must not be
+    # the same thing: a card's fields come from the page, never from a model
+    # restating them.
+    result_items: list[dict] = field(default_factory=list)
     pending_action: BrowserAction | None = None
     pending_risk: dict[str, Any] | None = None
     cancelled: bool = False
@@ -145,6 +154,7 @@ class Session:
             "tools": self.tools,
             "favourite": self.favourite,
             "extracted": self.extracted,
+            "result_items": self.result_items,
             "pending_action": (
                 self.pending_action.model_dump() if self.pending_action else None
             ),
@@ -180,6 +190,7 @@ class Session:
             tools=list(data.get("tools") or []),
             favourite=data.get("favourite"),
             extracted=list(data.get("extracted") or []),
+            result_items=list(data.get("result_items") or []),
             pending_action=action,
             pending_risk=data.get("pending_risk"),
             cancelled=bool(data.get("cancelled", False)),
@@ -536,7 +547,12 @@ class Orchestrator:
             )
 
         if plan.decision.type == "answer":
-            return self._terminal(session, COMPLETED, plan.message)
+            return self._terminal(
+                session,
+                COMPLETED,
+                plan.message,
+                results=select_results(session.result_items, plan.decision.item_indices),
+            )
 
         if plan.decision.type == "ask":
             session.state = WAITING_CONFIRMATION
@@ -635,6 +651,10 @@ class Orchestrator:
             rendered = data if isinstance(data, str) else _stringify(data)
             if rendered.strip():
                 session.extracted.append(rendered[: settings.max_extract_chars])
+            # Keep the structured items beside the text. The planner will pick
+            # from them by index, and only the page's own values are shown.
+            if isinstance(data, dict) and isinstance(data.get("items"), list):
+                session.result_items = data["items"]
 
         self.store.record_action(
             session.task_id,
@@ -644,7 +664,13 @@ class Orchestrator:
             "SUCCESS" if result.get("success") else "FAILED",
         )
 
-    def _terminal(self, session: Session, state: str, message: str) -> Directive:
+    def _terminal(
+        self,
+        session: Session,
+        state: str,
+        message: str,
+        results: list[ResultItem] | None = None,
+    ) -> Directive:
         session.state = state
         # The task is over: its live state is no longer needed by anyone.
         self.sessions.delete(session.task_id)
@@ -669,6 +695,7 @@ class Orchestrator:
             max_steps=self.max_steps,
             message=message,
             warnings=session.warnings,
+            results=results or [],
         )
         return directive
 

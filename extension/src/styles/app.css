@@ -1062,3 +1062,83 @@ a:focus:not(:focus-visible) {
   font-size: var(--text-xs);
   color: var(--fg-muted);
 }
+
+/* --- result cards -------------------------------------------------------- */
+
+.cards {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.card a,
+.card > .card__thumb,
+.card > .card__body {
+  display: flex;
+  gap: 9px;
+  padding: 7px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.card a { align-items: flex-start; }
+.card--link a:hover { background: var(--bg-subtle); }
+
+/* Fixed box so a row of cards lines up whatever each image turns out to be,
+   and so a card with no image is the same height as one with. */
+.card__thumb {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  background: var(--bg-subtle);
+}
+
+.card__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+}
+
+.card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+}
+
+.card__title {
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  /* Two lines: product titles are long, and one line cuts off the useful half. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card__price {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.card__meta {
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
