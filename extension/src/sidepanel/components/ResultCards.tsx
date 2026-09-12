@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ImageOff } from 'lucide-react';
+import { ImageOff, ChevronDown } from 'lucide-react';
 import type { ResultItem } from '../../types/agent';
 
 /**
@@ -17,6 +17,30 @@ import type { ResultItem } from '../../types/agent';
 
 interface ResultCardsProps {
   items: ResultItem[];
+}
+
+/**
+ * Cards shown before asking for the rest.
+ *
+ * Twelve in a 400px panel is a wall you scroll past rather than an answer you
+ * read. The backend already sent the whole selection, so the rest are held
+ * here and cost nothing to reveal.
+ */
+export const VISIBLE_BY_DEFAULT = 5;
+
+export function splitResults(
+  items: ResultItem[],
+  expanded: boolean,
+): { visible: ResultItem[]; hidden: number } {
+  if (expanded || items.length <= VISIBLE_BY_DEFAULT) {
+    return { visible: items, hidden: 0 };
+  }
+  // Sliced, never sorted: the model ranked these best-first, so the first five
+  // are the five it would have named.
+  return {
+    visible: items.slice(0, VISIBLE_BY_DEFAULT),
+    hidden: items.length - VISIBLE_BY_DEFAULT,
+  };
 }
 
 function Thumbnail({ src, alt }: { src?: string | null; alt: string }) {
@@ -74,13 +98,25 @@ function Card({ item }: { item: ResultItem }) {
 }
 
 export default function ResultCards({ items }: ResultCardsProps) {
+  const [expanded, setExpanded] = useState(false);
   if (!items.length) return null;
 
+  const { visible, hidden } = splitResults(items, expanded);
+
   return (
-    <ul className="cards" aria-label={`${items.length} results`}>
-      {items.map((item, index) => (
-        <Card key={`${item.url ?? item.title}-${index}`} item={item} />
-      ))}
-    </ul>
+    <>
+      <ul className="cards" aria-label={`${items.length} results`}>
+        {visible.map((item, index) => (
+          <Card key={`${item.url ?? item.title}-${index}`} item={item} />
+        ))}
+      </ul>
+
+      {hidden > 0 && (
+        <button type="button" className="cards__more" onClick={() => setExpanded(true)}>
+          <ChevronDown size={12} aria-hidden="true" />
+          Show {hidden} more
+        </button>
+      )}
+    </>
   );
 }

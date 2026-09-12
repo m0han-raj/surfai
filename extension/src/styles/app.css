@@ -1142,3 +1142,23 @@ a:focus:not(:focus-visible) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.cards__more {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.cards__more:hover {
+  background: var(--bg-subtle);
+  color: var(--fg);
+}
