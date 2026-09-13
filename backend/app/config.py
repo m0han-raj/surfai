@@ -113,14 +113,26 @@ class Settings(BaseSettings):
     #: 8,000 a minute leaves no room for the page or the answer. Measured.
     mcp_tool_filter: str = ""
 
-    max_elements_in_context: int = 60
+    #: Elements described to the planner. Sixty of them on a real page is
+    #: ~2,400 tokens, over half the request; thirty covers what a page offers
+    #: without spending the budget listing every link in a feed.
+    max_elements_in_context: int = 30
     # What the model is allowed to see of a page's text. Was 1200, about two
     # hundred words, which meant an answer "about this page" was really about
     # its opening sentence. The extension sends a budget of its own; this is
     # the ceiling, and it must not sit below it or it silently re-truncates.
     max_page_summary_chars: int = 12000
     max_recent_actions: int = 6
-    max_extract_chars: int = 4000
+    max_extract_chars: int = 2000
+    #: Page text given to the PLANNER, as opposed to the assistant.
+    #:
+    #: They want different things from the same snapshot. Answering a question
+    #: needs the prose, which is why `max_page_summary_chars` is large. Deciding
+    #: the next click needs the elements, and the prose is mostly ballast; it
+    #: was costing three thousand tokens on every step of a loop that runs one
+    #: model call per step. Measured: a planner call on a real page came to
+    #: ~4,400 tokens, and no free tier has room for two of those a minute.
+    max_planner_summary_chars: int = 1200
 
     # --- Security --------------------------------------------------------
     # `local` is a single unauthenticated user, correct only for a backend bound

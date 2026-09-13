@@ -79,11 +79,9 @@ whatever the user actually asked about.
 8. `activity` is one short present-tense phrase shown to the user, such as \
 "Applying filter" or "Reading results". No internal reasoning.
 9. When a TOOL_RESULT carries an `items` list and you are answering, set \
-`item_indices` to the indices of the items that answer the goal, best first, and \
-leave it empty if none do. The user is shown each item exactly as the page printed \
-it, so never copy a title, price or link into your message: restating one is how a \
-wrong price reaches them. Describe what you found and let the items speak for \
-themselves.
+`item_indices` to the indices that answer the goal, best first, empty if none do. The \
+user sees each item exactly as the page printed it, so never copy a title, price or \
+link into your message -- restating one is how a wrong price reaches them.
 
 Reply with a single JSON object and nothing else."""
 
@@ -216,7 +214,9 @@ def format_page_context(page: dict[str, Any], *, max_elements: int | None = None
     ]
     summary = (page.get("summary") or "").strip()
     if summary:
-        lines.append(f"Page text (excerpt): {summary[: settings.max_page_summary_chars]}")
+        # The planner's budget, not the assistant's: it is choosing an
+        # element, and the prose is mostly ballast at one call per step.
+        lines.append(f"Page text (excerpt): {summary[: settings.max_planner_summary_chars]}")
 
     lines.append("")
     lines.append("Interactive and structural elements:")
@@ -242,7 +242,7 @@ def _format_element(element: dict[str, Any]) -> str:
         or ""
     )
     if label:
-        parts.append(f'"{str(label)[:80]}"')
+        parts.append(f'"{str(label)[:60]}"')
     if element.get("placeholder") and element.get("placeholder") != label:
         parts.append(f"placeholder=\"{str(element['placeholder'])[:60]}\"")
     if element.get("inputType"):
@@ -253,7 +253,11 @@ def _format_element(element: dict[str, Any]) -> str:
     if element.get("value"):
         parts.append(f'value="{str(element["value"])[:40]}"')
     if element.get("href"):
-        parts.append(f"href={str(element['href'])[:100]}")
+        # Short: the planner targets elements by id, never by url, so this is
+        # only here to tell two links apart. A hundred characters of it on
+        # thirty elements was ~750 tokens per call, on a budget of 12,000 a
+        # minute shared with everything else.
+        parts.append(f"href={str(element['href'])[:60]}")
     if element.get("sensitive"):
         parts.append("SENSITIVE")
     if element.get("disabled"):

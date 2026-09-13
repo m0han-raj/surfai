@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -40,6 +41,44 @@ from app.llm.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: How many times to wait out a rate limit before giving up.
+MAX_RATE_LIMIT_RETRIES = 3
+
+#: Longest single wait. A free tier prices tokens per minute and refills, so a
+#: few seconds is worth waiting; beyond a minute the user is better told.
+MAX_RETRY_WAIT_S = 60.0
+
+#: Groq states the delay in prose rather than only in a header:
+#: "Please try again in 5.225s." or "in 1m30s."
+_RETRY_IN = re.compile(
+    r"try again in\s+(?:(\d+)m)?\s*([\d.]+)s", re.IGNORECASE
+)
+
+
+def retry_after_seconds(body: str, headers: dict) -> float:
+    """How long to wait before trying again.
+
+    Prefers the `retry-after` header, falls back to the sentence in the body,
+    and otherwise picks a sane default rather than hammering the endpoint.
+    """
+    header = headers.get("retry-after") or headers.get("Retry-After")
+    if header:
+        try:
+            return min(float(header), MAX_RETRY_WAIT_S)
+        except (TypeError, ValueError):
+            pass
+
+    match = _RETRY_IN.search(body or "")
+    if match:
+        minutes = float(match.group(1) or 0)
+        seconds = float(match.group(2) or 0)
+        # A pause the user is waiting through, so it is capped rather than
+        # obeyed literally: an hour is not a wait, it is a failure.
+        return min(minutes * 60 + seconds, MAX_RETRY_WAIT_S)
+
+    return 10.0
+
 
 def _shape_instruction(schema: dict[str, Any]) -> str:
     """Tell a non-strict endpoint what to produce.
@@ -101,7 +140,9 @@ class OpenAICompatibleProvider(LLMProvider):
             await self._client.aclose()
         self._client = None
 
-    async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _post(
+        self, path: str, payload: dict[str, Any], attempt: int = 0
+    ) -> dict[str, Any]:
         client = await self._get_client()
         try:
             response = await client.post(path, json=payload)
@@ -121,6 +162,21 @@ class OpenAICompatibleProvider(LLMProvider):
                     f"LLM rejected the credentials (HTTP {response.status_code}). "
                     "Check LLM_API_KEY."
                 )
+            if response.status_code == 429 and attempt < MAX_RATE_LIMIT_RETRIES:
+                # A free tier prices tokens per minute and the budget refills,
+                # so this is a pause rather than a failure. A five-step task
+                # costs more than a minute's worth on every free tier there is;
+                # giving up at the moment it runs out throws away a task that
+                # would have finished a few seconds later.
+                delay = retry_after_seconds(body, dict(response.headers))
+                logger.info(
+                    "Rate limited by the LLM; waiting %.1fs (attempt %d of %d)",
+                    delay,
+                    attempt + 1,
+                    MAX_RATE_LIMIT_RETRIES,
+                )
+                await asyncio.sleep(delay)
+                return await self._post(path, payload, attempt=attempt + 1)
             raise LLMResponseError(f"LLM returned HTTP {response.status_code}: {body}")
 
         try:
