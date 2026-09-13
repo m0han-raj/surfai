@@ -357,7 +357,8 @@ class Orchestrator:
         )
         self.store.update_task(task_id, status=ANALYZING)
 
-        return await self._advance(session, page)
+        directive = await self._advance(session, page)
+        return _with_found_so_far(directive, session, page)
 
     async def continue_task(
         self,
@@ -472,7 +473,8 @@ class Orchestrator:
                             "may not support what I was attempting.",
                         )
 
-        return await self._advance(session, page)
+        directive = await self._advance(session, page)
+        return _with_found_so_far(directive, session, page)
 
     def cancel(self, task_id: str, user_id: str = "") -> Directive:
         """Stop a task. Idempotent, and never loses history."""
@@ -756,6 +758,38 @@ MAX_IDENTICAL_ACTIONS = 3
 #: Successful actions in a row that change nothing before the task gives up.
 #: Typing into a box changes nothing visible, so a couple is ordinary.
 MAX_UNCHANGED_ACTIONS = 5
+
+
+def _with_found_so_far(
+    directive: Directive, session: Session, page: dict[str, Any] | None = None
+) -> Directive:
+    """Carry what has been found so far on a step that is still running.
+
+    Showing results as they arrive is the difference between a spinner and
+    watching the work happen.
+
+    Two sources, in order of how deliberate they are. An EXTRACT read the page
+    on purpose, so it wins. Otherwise the snapshot's own result list is used,
+    which is what makes cards appear the moment a search lands: keying off
+    extraction alone meant they only showed if the planner chose to EXTRACT and
+    then did something else afterwards, and in the ordinary flow -- search,
+    land on results, answer -- it never does.
+
+    Unfiltered on purpose: choosing which ones answer the question is what the
+    planner does at the end. A terminal directive is left alone, because by
+    then the selection is the answer and the raw list would undo the choosing.
+    """
+    if directive.type in ("answer", "error") or directive.results:
+        return directive
+
+    items = session.result_items
+    if not items and isinstance(page, dict) and isinstance(page.get("items"), list):
+        items = page["items"]
+    if not items:
+        return directive
+
+    directive.results = select_results(items, list(range(len(items))))
+    return directive
 
 
 def _looping_on(session: Session, action) -> str | None:  # noqa: ANN001

@@ -210,3 +210,122 @@ def test_a_page_with_no_list_yields_no_cards(client, fake_llm) -> None:
     ).json()
 
     assert directive["results"] == []
+
+
+# --- cards while the task is still running --------------------------------
+
+
+async def test_results_appear_before_the_task_finishes(fake_llm, product_page) -> None:
+    """Watching results arrive beats watching a spinner.
+
+    The items were already being extracted and stored on every successful
+    EXTRACT; they just sat unused until the task ended. Now each step carries
+    what has been found so far.
+    """
+    from app.agents.orchestrator import Orchestrator
+
+    orchestrator = Orchestrator(fake_llm)
+    fake_llm.push(
+        {"type": "action", "activity": "Reading", "action": {"action": "EXTRACT"}},
+        {"type": "action", "activity": "Opening", "action": {"action": "CLICK", "target": "e2"}},
+    )
+
+    await orchestrator.start(task_id="p1", message="find shoes", page=product_page)
+    directive = await orchestrator.continue_task(
+        task_id="p1",
+        page=product_page,
+        result={
+            "success": True,
+            "action": "EXTRACT",
+            "url_changed": False,
+            "page_changed": True,
+            "data": {"items": [
+                {"title": "Nike Revolution 7", "price": "₹2,499"},
+                {"title": "Nike Court Vision", "price": "₹899"},
+            ]},
+        },
+    )
+
+    assert directive.type == "action", "the task should still be running"
+    assert [item.title for item in directive.results] == [
+        "Nike Revolution 7",
+        "Nike Court Vision",
+    ]
+
+
+async def test_a_step_with_nothing_found_carries_no_cards(fake_llm, product_page) -> None:
+    from app.agents.orchestrator import Orchestrator
+
+    orchestrator = Orchestrator(fake_llm)
+    fake_llm.push({"type": "action", "activity": "Typing",
+                   "action": {"action": "TYPE", "target": "e1", "value": "shoes"}})
+
+    directive = await orchestrator.start(task_id="p2", message="find shoes", page=product_page)
+    assert directive.results == []
+
+
+def test_no_more_than_ten_cards_are_ever_shown() -> None:
+    """A panel is four hundred pixels wide; ten is already a scroll."""
+    many = [{"title": f"Item {i}"} for i in range(50)]
+    assert len(select_results(many, list(range(50)))) == 10
+
+
+async def test_cards_appear_as_soon_as_the_page_shows_results(fake_llm, product_page) -> None:
+    """Not only after an explicit EXTRACT.
+
+    The first version keyed off extracted data, which meant cards appeared only
+    if the planner chose to EXTRACT and then did something else afterwards. In
+    the ordinary flow -- search, land on results, answer -- that never happens,
+    so nothing showed until the end. The snapshot already carries the page's
+    result list, so the moment a search lands, there is something to show.
+    """
+    from app.agents.orchestrator import Orchestrator
+
+    results_page = dict(
+        product_page,
+        items=[
+            {"title": "Nike Revolution 7", "price": "₹2,499"},
+            {"title": "Nike Court Vision", "price": "₹899"},
+        ],
+    )
+    orchestrator = Orchestrator(fake_llm)
+    fake_llm.push(
+        {"type": "action", "activity": "Searching", "action": {"action": "CLICK", "target": "e2"}},
+        {"type": "action", "activity": "Reading", "action": {"action": "EXTRACT"}},
+    )
+
+    await orchestrator.start(task_id="p3", message="find shoes", page=product_page)
+    directive = await orchestrator.continue_task(
+        task_id="p3",
+        page=results_page,
+        result={"success": True, "action": "CLICK", "url_changed": True, "page_changed": True},
+    )
+
+    assert [item.title for item in directive.results] == [
+        "Nike Revolution 7",
+        "Nike Court Vision",
+    ]
+
+
+async def test_extracted_results_win_over_the_page_snapshot(fake_llm, product_page) -> None:
+    """An EXTRACT read the page deliberately; the snapshot is only a glance."""
+    from app.agents.orchestrator import Orchestrator
+
+    page_with_items = dict(product_page, items=[{"title": "From the snapshot"}])
+    orchestrator = Orchestrator(fake_llm)
+    fake_llm.push(
+        {"type": "action", "activity": "Reading", "action": {"action": "EXTRACT"}},
+        {"type": "action", "activity": "Next", "action": {"action": "SCROLL", "direction": "down"}},
+    )
+
+    await orchestrator.start(task_id="p4", message="find shoes", page=page_with_items)
+    directive = await orchestrator.continue_task(
+        task_id="p4",
+        page=page_with_items,
+        result={
+            "success": True, "action": "EXTRACT", "url_changed": False, "page_changed": True,
+            "data": {"items": [{"title": "From the extraction"}]},
+        },
+    )
+
+    assert [item.title for item in directive.results] == ["From the extraction"]

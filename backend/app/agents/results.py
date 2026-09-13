@@ -22,8 +22,9 @@ from urllib.parse import urlparse
 SAFE_SCHEMES = frozenset({"http", "https"})
 
 #: Cards shown at once. Forty is a wall rather than an answer, and the model
-#: was asked to choose, so a long selection means it did not.
-MAX_RESULTS = 12
+#: was asked to choose, so a long selection means it did not. Ten is already a
+#: scroll in a four-hundred-pixel panel.
+MAX_RESULTS = 10
 
 MAX_TITLE = 300
 MAX_PRICE = 100

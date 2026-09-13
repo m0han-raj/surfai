@@ -99,6 +99,14 @@ export function useAgent() {
     [ensurePending],
   );
 
+  /** Show results on the reply being built, before the task finishes. */
+  const attachResults = useCallback((results: ResultItem[]) => {
+    const id = ensurePending();
+    setMessages((current) =>
+      current.map((message) => (message.id === id ? { ...message, results } : message)),
+    );
+  }, [ensurePending]);
+
   /** Replace the placeholder with the final reply, keeping its steps. */
   const settlePending = useCallback(
     (
@@ -123,7 +131,7 @@ export function useAgent() {
                   pending: false,
                   error: options.error,
                   warnings: options.warnings?.length ? options.warnings : undefined,
-                  results: options.results?.length ? options.results : undefined,
+                  results: options.results?.length ? options.results : message.results,
                   steps: options.browserSteps?.length
                     ? options.browserSteps.map((step, index) => ({
                         id: `b${index}`,
@@ -169,6 +177,10 @@ export function useAgent() {
       {
         onDirective: (directive) => {
           setState(directive.state);
+          // Results found so far, shown under the in-progress reply rather
+          // than held back until the task ends. They are everything the page
+          // listed; the final answer narrows them to the ones that match.
+          if (directive.results?.length) attachResults(directive.results);
         },
 
         onActivity: addStep,
@@ -205,7 +217,7 @@ export function useAgent() {
       },
       optionsRef.current,
     );
-  }, [addStep, settlePending]);
+  }, [addStep, attachResults, settlePending]);
 
   const send = useCallback(
     async (text: string, domain?: string) => {
