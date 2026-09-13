@@ -174,16 +174,24 @@ async def test_retries_are_bounded_then_the_task_fails(fake_llm, product_page) -
 
 
 async def test_success_resets_the_failure_counter(fake_llm, product_page) -> None:
+    # Different targets each turn: identical actions now trip the loop guard,
+    # and this test is about the retry budget rather than about repetition.
     orchestrator = Orchestrator(fake_llm, max_retries=1)
-    fake_llm.push(*[action("CLICK", target="e2") for _ in range(6)], answer("done"))
+    fake_llm.push(
+        action("CLICK", target="e2"),
+        action("CLICK", target="e3"),
+        action("CLICK", target="e4"),
+        action("CLICK", target="e5"),
+        answer("done"),
+    )
 
     await orchestrator.start(task_id="t1", message="search", page=product_page)
     await orchestrator.continue_task(
         task_id="t1", page=product_page, result=failed("CLICK", "e2", "transient")
     )
-    await orchestrator.continue_task(task_id="t1", page=product_page, result=ok("CLICK", "e2"))
+    await orchestrator.continue_task(task_id="t1", page=product_page, result=ok("CLICK", "e3"))
     directive = await orchestrator.continue_task(
-        task_id="t1", page=product_page, result=failed("CLICK", "e2", "transient again")
+        task_id="t1", page=product_page, result=failed("CLICK", "e4", "transient again")
     )
     assert directive.type == "action", "a success should clear the retry budget"
 
@@ -403,3 +411,235 @@ async def test_injection_cannot_bypass_the_confirmation_gate(
     )
     assert directive.type == "confirm"
     assert directive.risk["requires_confirmation"] is True
+
+
+# --- a planner that keeps failing must not loop forever -------------------
+
+
+async def test_repeated_planning_failures_end_the_task(fake_llm, product_page) -> None:
+    """The loop users actually hit: "Action completed / Re-planning", forever.
+
+    When the planner cannot produce a valid decision the orchestrator re-plans,
+    and it does that by emitting a WAIT for the extension to run. WAIT always
+    succeeds, and a successful result reset `consecutive_failures`, so the
+    counter went 1, 0, 1, 0 and never reached the limit. `session.step` did not
+    advance either, because it is only incremented on the action path, so the
+    max-steps ceiling never caught it. Both nets were defeated by the same
+    thing and the task ran until the user cancelled it.
+    """
+    orchestrator = Orchestrator(fake_llm, max_retries=2, max_steps=20)
+    # A planner that never returns anything usable.
+    fake_llm.push(*[{"nonsense": True} for _ in range(40)])
+
+    directive = await orchestrator.start(task_id="t1", message="play something", page=product_page)
+
+    for _ in range(12):
+        if directive.type in ("answer", "error"):
+            break
+        directive = await orchestrator.continue_task(
+            task_id="t1", page=product_page, result=ok("WAIT", None)
+        )
+    else:
+        raise AssertionError("the task never stopped; it re-planned forever")
+
+    assert directive.type == "error"
+    assert directive.state == FAILED
+
+
+async def test_an_action_succeeding_does_not_excuse_a_broken_planner(
+    fake_llm, product_page
+) -> None:
+    """The specific confusion: an action working says nothing about planning.
+
+    They are different failures. A WAIT completing is not evidence that the
+    planner has recovered, and treating it as such is what made the loop
+    unbounded.
+    """
+    orchestrator = Orchestrator(fake_llm, max_retries=1, max_steps=20)
+    fake_llm.push(*[{"nonsense": True} for _ in range(40)])
+
+    directive = await orchestrator.start(task_id="t2", message="do a thing", page=product_page)
+    turns = 0
+    while directive.type not in ("answer", "error") and turns < 10:
+        directive = await orchestrator.continue_task(
+            task_id="t2", page=product_page, result=ok("WAIT", None)
+        )
+        turns += 1
+
+    assert directive.type == "error", "a permanently broken planner never gave up"
+    assert turns <= 3, f"it took {turns} turns to notice the planner was broken"
+
+
+async def test_re_planning_still_counts_towards_the_step_ceiling(
+    fake_llm, product_page
+) -> None:
+    """A backstop, so any future loop that does not act is still bounded."""
+    orchestrator = Orchestrator(fake_llm, max_retries=99, max_steps=4)
+    fake_llm.push(*[{"nonsense": True} for _ in range(40)])
+
+    directive = await orchestrator.start(task_id="t3", message="do a thing", page=product_page)
+    for _ in range(10):
+        if directive.type in ("answer", "error"):
+            break
+        directive = await orchestrator.continue_task(
+            task_id="t3", page=product_page, result=ok("WAIT", None)
+        )
+
+    assert directive.type == "error"
+    assert "steps" in directive.message.lower() or "step" in directive.message.lower()
+
+
+async def test_the_same_action_over_and_over_ends_the_task(fake_llm, product_page) -> None:
+    """A page that does not respond should not cost fifteen identical steps.
+
+    Asked to play a song on a page whose snapshot never changes, the planner
+    typed the query, clicked search, then typed the query again, and kept
+    cycling. Every action succeeded, so nothing counted as a failure; only the
+    step ceiling stopped it, fifteen model calls later.
+
+    The prompt was told not to repeat itself and did anyway, which is the same
+    lesson as everywhere else in this codebase: if it has to be true, decide it
+    in Python.
+    """
+    orchestrator = Orchestrator(fake_llm, max_steps=20)
+    fake_llm.push(*[action("CLICK", target="e2") for _ in range(30)])
+
+    directive = await orchestrator.start(task_id="t4", message="search", page=product_page)
+    for _ in range(12):
+        if directive.type in ("answer", "error"):
+            break
+        directive = await orchestrator.continue_task(
+            task_id="t4", page=product_page, result=ok("CLICK", "e2")
+        )
+
+    assert directive.type == "error"
+    assert "same" in directive.message.lower() or "repeat" in directive.message.lower()
+
+
+async def test_repeating_an_action_a_couple_of_times_is_allowed(
+    fake_llm, product_page
+) -> None:
+    """Clicking twice is ordinary: paginating, or a button that needs a nudge.
+
+    Only a run of identical steps going nowhere is a loop.
+    """
+    orchestrator = Orchestrator(fake_llm, max_steps=20)
+    fake_llm.push(
+        action("CLICK", target="e2"),
+        action("CLICK", target="e2"),
+        answer("done"),
+    )
+
+    await orchestrator.start(task_id="t5", message="search", page=product_page)
+    await orchestrator.continue_task(task_id="t5", page=product_page, result=ok("CLICK", "e2"))
+    directive = await orchestrator.continue_task(
+        task_id="t5", page=product_page, result=ok("CLICK", "e2")
+    )
+
+    assert directive.type == "answer"
+
+
+async def test_alternating_between_two_actions_is_still_a_loop(
+    fake_llm, product_page
+) -> None:
+    """The shape actually seen: type, click, type, click, going nowhere."""
+    orchestrator = Orchestrator(fake_llm, max_steps=20)
+    turns = []
+    for _ in range(15):
+        turns.append(action("TYPE", target="e1", value="mannaru"))
+        turns.append(action("CLICK", target="e2"))
+    fake_llm.push(*turns)
+
+    directive = await orchestrator.start(task_id="t6", message="play it", page=product_page)
+    for _ in range(14):
+        if directive.type in ("answer", "error"):
+            break
+        act = directive.action or {}
+        directive = await orchestrator.continue_task(
+            task_id="t6",
+            page=product_page,
+            result=ok(act.get("action", "CLICK"), act.get("target")),
+        )
+
+    assert directive.type == "error", "an alternating loop ran to the step ceiling"
+
+
+async def test_a_page_that_never_moves_ends_the_task(fake_llm, product_page) -> None:
+    """The flailing case, which varied actions defeat.
+
+    Asked to play a song on a page that never responded, the planner tried
+    type, click, extract, navigate, wait, type again -- no two consecutive
+    steps identical, so a repeat guard sees nothing, and every step succeeded,
+    so no failure counter moves. Only the step ceiling stopped it, fifteen
+    model calls and a lot of tokens later.
+
+    The signal was in the results the whole time: nothing reported a changed
+    page or a changed url. An agent acting on a page that will not move is not
+    making progress, whatever it tries next.
+    """
+    orchestrator = Orchestrator(fake_llm, max_steps=20)
+    fake_llm.push(
+        action("TYPE", target="e1", value="mannaru"),
+        action("CLICK", target="e2"),
+        action("EXTRACT"),
+        action("SCROLL", direction="down"),
+        action("CLICK", target="e3"),
+        action("EXTRACT"),
+        action("SCROLL", direction="up"),
+        action("CLICK", target="e5"),
+        action("EXTRACT", target="e6"),
+        action("SCROLL", direction="bottom"),
+        action("CLICK", target="e7"),
+        action("EXTRACT", target="e8"),
+    )
+
+    directive = await orchestrator.start(task_id="t7", message="play it", page=product_page)
+    for _ in range(10):
+        if directive.type in ("answer", "error"):
+            break
+        act = directive.action or {}
+        directive = await orchestrator.continue_task(
+            task_id="t7",
+            page=product_page,
+            # Everything works, and nothing moves.
+            result={
+                "success": True,
+                "action": act.get("action", "CLICK"),
+                "target": act.get("target"),
+                "url_changed": False,
+                "page_changed": False,
+            },
+        )
+
+    assert directive.type == "error", "it flailed at an unresponsive page indefinitely"
+    assert "did not" in directive.message.lower() or "not respond" in directive.message.lower()
+
+
+async def test_a_page_that_does_move_is_left_alone(fake_llm, product_page) -> None:
+    """Typing into a box changes nothing visible, and that is normal."""
+    orchestrator = Orchestrator(fake_llm, max_steps=20)
+    fake_llm.push(
+        action("TYPE", target="e1", value="mouse"),
+        action("TYPE", target="e3", value="more"),
+        action("CLICK", target="e2"),
+        answer("found it"),
+    )
+
+    directive = await orchestrator.start(task_id="t8", message="search", page=product_page)
+    for changed in (False, False, True):
+        if directive.type in ("answer", "error"):
+            break
+        act = directive.action or {}
+        directive = await orchestrator.continue_task(
+            task_id="t8",
+            page=product_page,
+            result={
+                "success": True,
+                "action": act.get("action", "CLICK"),
+                "target": act.get("target"),
+                "url_changed": False,
+                "page_changed": changed,
+            },
+        )
+
+    assert directive.type == "answer"

@@ -110,6 +110,21 @@ class Session:
     state: str = IDLE
     step: int = 0
     consecutive_failures: int = 0
+    #: Planning failures, counted separately from action failures.
+    #:
+    #: They are different things, and conflating them made the loop unbounded:
+    #: re-planning emits a WAIT for the extension to run, WAIT always succeeds,
+    #: and a successful action reset the shared counter. It went 1, 0, 1, 0 and
+    #: never reached the limit, so the task re-planned until the user cancelled
+    #: it. An action completing is no evidence that the planner has recovered.
+    planner_failures: int = 0
+    #: Successful actions in a row that moved neither the page nor the url.
+    #:
+    #: An agent acting on a page that will not respond is not making progress,
+    #: whatever it tries next, and varying the actions defeats a repeat guard:
+    #: type, click, extract, navigate, wait, type again, none of them identical
+    #: and all of them succeeding.
+    unchanged_actions: int = 0
     # Wall clock rather than a monotonic counter: elapsed time has to mean
     # something across processes.
     started_at: float = field(default_factory=time.time)
@@ -149,6 +164,8 @@ class Session:
             "state": self.state,
             "step": self.step,
             "consecutive_failures": self.consecutive_failures,
+            "planner_failures": self.planner_failures,
+            "unchanged_actions": self.unchanged_actions,
             "started_at": self.started_at,
             "history": self.history,
             "tools": self.tools,
@@ -185,6 +202,8 @@ class Session:
             state=str(data.get("state", IDLE)),
             step=int(data.get("step", 0)),
             consecutive_failures=int(data.get("consecutive_failures", 0)),
+            planner_failures=int(data.get("planner_failures", 0)),
+            unchanged_actions=int(data.get("unchanged_actions", 0)),
             started_at=float(data.get("started_at", time.time())),
             history=list(data.get("history") or []),
             tools=list(data.get("tools") or []),
@@ -436,6 +455,23 @@ class Orchestrator:
                 session.consecutive_failures = 0
                 session.state = VERIFYING
 
+                # Track whether the page is responding at all. Typing into a
+                # box legitimately changes nothing, so a couple in a row is
+                # ordinary; a run of them means the page is not moving and
+                # nothing the planner tries next will change that.
+                if result.get("page_changed") or result.get("url_changed"):
+                    session.unchanged_actions = 0
+                else:
+                    session.unchanged_actions += 1
+                    if session.unchanged_actions >= MAX_UNCHANGED_ACTIONS:
+                        return self._terminal(
+                            session,
+                            FAILED,
+                            "I acted on the page several times and it did not respond, so I "
+                            "stopped rather than keep trying. The page may need a moment, or "
+                            "may not support what I was attempting.",
+                        )
+
         return await self._advance(session, page)
 
     def cancel(self, task_id: str, user_id: str = "") -> Directive:
@@ -527,12 +563,16 @@ class Orchestrator:
                 f"running and that LLM_BASE_URL is correct. ({exc})",
             )
         except PlannerError as exc:
-            session.consecutive_failures += 1
-            if session.consecutive_failures > self.max_retries:
+            session.planner_failures += 1
+            if session.planner_failures > self.max_retries:
                 return self._terminal(
                     session, FAILED, f"I could not work out a valid next step. ({exc})"
                 )
-            # Re-observe and try again on the next round trip.
+            # Re-observe and try again on the next round trip. This counts as a
+            # step: a loop that never acts must still be bounded by something,
+            # and the step ceiling is the only backstop that does not depend on
+            # guessing why the planner is unhappy.
+            session.step += 1
             session.state = REPLANNING
             self.sessions.save(session)
             return Directive(
@@ -545,6 +585,10 @@ class Orchestrator:
                 action={"action": "WAIT", "timeout_ms": 500, "reason": "re-observing the page"},
                 warnings=session.warnings,
             )
+
+        # Reached only when the planner produced something valid, which is the
+        # only thing that says it has recovered.
+        session.planner_failures = 0
 
         if plan.decision.type == "answer":
             return self._terminal(
@@ -582,6 +626,10 @@ class Orchestrator:
         )
 
         session.step += 1
+
+        stuck = _looping_on(session, action)
+        if stuck is not None:
+            return self._terminal(session, FAILED, stuck)
 
         if risk.requires_confirmation:
             session.pending_action = action
@@ -698,6 +746,49 @@ class Orchestrator:
             results=results or [],
         )
         return directive
+
+
+#: How many times the same action may be issued before it counts as a loop.
+#: Two is ordinary -- paginating, or a button that needs a second nudge. Beyond
+#: that, nothing is being learned from doing it again.
+MAX_IDENTICAL_ACTIONS = 3
+
+#: Successful actions in a row that change nothing before the task gives up.
+#: Typing into a box changes nothing visible, so a couple is ordinary.
+MAX_UNCHANGED_ACTIONS = 5
+
+
+def _looping_on(session: Session, action) -> str | None:  # noqa: ANN001
+    """Is the planner going in circles? Returns why, or None.
+
+    Decided here rather than asked of the model. The prompt does tell it not to
+    repeat itself, and on a page whose snapshot never changes it repeats itself
+    anyway: type the query, click search, type the query again, around and
+    around until the step ceiling stops it fifteen model calls later. Every one
+    of those actions succeeded, so no failure counter ever moved.
+
+    Counts identical actions rather than consecutive ones, because the shape
+    seen in the wild alternates between two of them.
+    """
+    signature = (action.action, action.target, action.value)
+    seen = sum(
+        1
+        for entry in session.history
+        if (
+            entry.get("action", {}).get("action"),
+            entry.get("action", {}).get("target"),
+            entry.get("action", {}).get("value"),
+        )
+        == signature
+    )
+    if seen < MAX_IDENTICAL_ACTIONS:
+        return None
+
+    return (
+        f"I kept trying the same thing ({action.action.lower()}) and the page did not "
+        "move on, so I stopped rather than repeat it further. Tell me the next step "
+        "directly, or try a narrower request."
+    )
 
 
 def _failure_message(result: dict[str, Any], attempts: int) -> str:
