@@ -34,6 +34,9 @@ class ChatRequest(BaseModel):
     # The thread to append to. Absent starts a new one; unknown, or somebody
     # else's, also starts a new one rather than failing.
     conversation_id: str | None = None
+    # Drive a browser through Playwright MCP instead of the user's own tab.
+    # Explicit, because the two act on different browsers: see ARCHITECTURE.md.
+    browser_control: bool = False
     # Recent turns only. The backend holds no conversation state; the panel
     # sends what it wants remembered, and the assistant caps it.
     history: list[ChatTurn] = Field(default_factory=list, max_length=20)
@@ -70,6 +73,8 @@ class DirectiveResponse(BaseModel):
     # Result cards. Every field is copied from the page; the model only ever
     # chose which items to show, so a card cannot carry an invented price.
     results: list[dict[str, Any]] = Field(default_factory=list)
+    # Browser tool calls made while answering, for the panel to show.
+    steps: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FavouriteCreate(BaseModel):

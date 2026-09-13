@@ -46,6 +46,7 @@ export function useAgent() {
     // Agent steps stay lean: the loop re-reads the page every step and needs
     // the controls, not the prose.
     stepTextChars: 1_500,
+    browserControl: false,
     actionTimeoutMs: 10_000,
   });
   /** Id of the assistant placeholder currently collecting steps. */
@@ -59,6 +60,7 @@ export function useAgent() {
         ...optionsRef.current,
         maxElements: settings.maxElements,
         maxTextChars: settings.maxTextChars,
+        browserControl: settings.browserControl,
         actionTimeoutMs: settings.actionTimeoutMs,
       };
     });
@@ -101,7 +103,12 @@ export function useAgent() {
   const settlePending = useCallback(
     (
       content: string,
-      options: { error?: boolean; warnings?: string[]; results?: ResultItem[] } = {},
+      options: {
+        error?: boolean;
+        warnings?: string[];
+        results?: ResultItem[];
+        browserSteps?: Array<{ name: string; ok: boolean; summary: string }>;
+      } = {},
     ) => {
       const id = pendingIdRef.current;
       pendingIdRef.current = null;
@@ -117,9 +124,17 @@ export function useAgent() {
                   error: options.error,
                   warnings: options.warnings?.length ? options.warnings : undefined,
                   results: options.results?.length ? options.results : undefined,
-                  steps: (message.steps ?? []).map((step) =>
-                    step.status === 'running' ? { ...step, status: 'done' as const } : step,
-                  ),
+                  steps: options.browserSteps?.length
+                    ? options.browserSteps.map((step, index) => ({
+                        id: `b${index}`,
+                        label: step.summary || step.name,
+                        status: step.ok ? ('done' as const) : ('failed' as const),
+                      }))
+                    : (message.steps ?? []).map((step) =>
+                        step.status === 'running'
+                          ? { ...step, status: 'done' as const }
+                          : step,
+                      ),
                 }
               : message,
           );
@@ -135,6 +150,13 @@ export function useAgent() {
             error: options.error,
             warnings: options.warnings?.length ? options.warnings : undefined,
             results: options.results?.length ? options.results : undefined,
+            steps: options.browserSteps?.length
+              ? options.browserSteps.map((step, index) => ({
+                  id: `b${index}`,
+                  label: step.summary || step.name,
+                  status: step.ok ? ('done' as const) : ('failed' as const),
+                }))
+              : undefined,
           },
         ];
       });
@@ -167,6 +189,10 @@ export function useAgent() {
             error: directive.type === 'error' && directive.state !== 'CANCELLED',
             warnings: directive.warnings,
             results: directive.results,
+            // Browser tool calls come back with the answer rather than
+            // streaming, so they are attached here and render in the same
+            // folded step list the agent loop already uses.
+            browserSteps: directive.steps,
           });
         },
 

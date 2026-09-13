@@ -258,6 +258,26 @@ export default function SettingsPage() {
           </label>
         </div>
 
+        <div className="checkbox-row">
+          <input
+            id="browser-control"
+            type="checkbox"
+            checked={settings.browserControl}
+            onChange={(event) =>
+              setSettings({ ...settings, browserControl: event.target.checked })
+            }
+          />
+          <label htmlFor="browser-control" className="text-sm">
+            Drive a browser with Playwright MCP
+            <span className="field__hint">
+              Off by default, and deliberately not automatic: this acts on the browser your
+              MCP server was pointed at, which is a separate browser unless that server was
+              started with --cdp-endpoint or --extension. Needs a Playwright MCP server
+              running and MCP_ENABLED set on the backend. See ARCHITECTURE.md.
+            </span>
+          </label>
+        </div>
+
         <div className="row" style={{ justifyContent: 'flex-end' }}>
           <button
             type="button"

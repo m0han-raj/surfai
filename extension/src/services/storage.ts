@@ -23,6 +23,14 @@ export interface SurfAISettings {
   actionTimeoutMs: number;
   /** Auto-run low-risk actions. Medium and high always confirm regardless. */
   autoRunLowRisk: boolean;
+  /**
+   * Drive a browser through Playwright MCP instead of your own tab.
+   *
+   * Explicit rather than automatic, because the two act on different
+   * browsers: the normal path acts on the tab in front of you, this one on
+   * whatever browser the MCP server was pointed at.
+   */
+  browserControl: boolean;
   theme: 'light' | 'dark' | 'system';
 }
 
@@ -32,6 +40,7 @@ export const DEFAULT_SETTINGS: SurfAISettings = {
   maxTextChars: 12_000,
   actionTimeoutMs: 10_000,
   autoRunLowRisk: true,
+  browserControl: false,
   theme: 'light',
 };
 

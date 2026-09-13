@@ -37,6 +37,15 @@ of the steps it took.
 
 ## Architecture
 
+Two paths control a browser, and they control **different browsers**.
+[ARCHITECTURE.md](ARCHITECTURE.md) covers this in full; the short version:
+
+| | Acts on | Needs | Default |
+|---|---|---|---|
+| Content script | the tab you are looking at | nothing | on |
+| Playwright MCP | the browser its server was pointed at | a Playwright MCP server | off |
+
+
 ```mermaid
 flowchart TB
     subgraph Browser["Chrome"]
@@ -284,6 +293,22 @@ changes the prompt-injection position. Read [SECURITY.md](SECURITY.md) first.
 
 ---
 
+## Browser control with Playwright MCP
+
+Optional and off by default. Start a server beside your browser:
+
+```bash
+npx @playwright/mcp --port 8931 --browser chrome            # its own browser
+npx @playwright/mcp --port 8931 --cdp-endpoint http://localhost:9222   # your Chrome
+npx @playwright/mcp --port 8931 --extension                 # your Chrome, via extension
+```
+
+Set `MCP_ENABLED=true` and `MCP_SERVER_URL` in `.env`, restart the backend, and turn on
+**Drive a browser with Playwright MCP** in the panel's Settings. The assistant then gets
+the server's tools, discovered at runtime, and can navigate, read, click, type, scroll and
+go back. Sensitive actions still require confirmation, and tool results are treated as
+untrusted page content exactly as a tab's contents are.
+
 ## Configuration
 
 Every setting is an environment variable; [.env.example](.env.example) is the annotated list. The
@@ -328,6 +353,11 @@ extraction, the manifest's permission balance, and the demo pages loaded from di
 
 ## Limitations
 
+Playwright MCP drives its own browser, not yours, unless its server is started with
+`--cdp-endpoint` or `--extension`; and a hosted backend can never reach a browser on your
+laptop, so browser control is local only. A Playwright accessibility snapshot of a real
+site is roughly 5,000 tokens, which on a free tier is most of a minute's budget in one
+call, so `MCP_MAX_RESULT_CHARS` truncates large pages.
 Real-model planning quality is unmeasured; expect to tune prompts and `MAX_ELEMENTS_IN_CONTEXT`.
 One tab, one task at a time, and no cross-site workflows. A hosted deployment has no rate limiting
 or per-user cost cap, so every signed-in user can spend model tokens freely. No login automation, no

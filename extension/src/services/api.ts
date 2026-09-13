@@ -243,6 +243,7 @@ export const api = {
     tab_context: TabContext;
     history?: Array<{ role: 'user' | 'assistant'; content: string }>;
     conversation_id?: string | null;
+    browser_control?: boolean;
   }) =>
     request<Directive>('/api/chat', {
       method: 'POST',

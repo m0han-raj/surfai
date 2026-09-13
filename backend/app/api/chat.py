@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.agents.assistant import Assistant
+from app.agents.browser_agent import BrowserAgent
 from app.agents.memory_agent import MemoryAgent
 from app.agents.orchestrator import COMPLETED, FAILED, Orchestrator
 from app.agents.results import ResultItem, select_results
@@ -31,6 +32,7 @@ from app.database.repositories.conversations import ConversationRepository
 from app.database.repositories.favourites import FavouriteRepository, to_dict
 from app.llm.openai_compatible import get_provider
 from app.llm.provider import LLMError, LLMUnavailableError
+from app.mcp.transport import build_client
 from app.security.permissions import User, get_current_user
 
 logger = logging.getLogger(__name__)
@@ -56,13 +58,46 @@ async def chat(
     Tasks keep their own history, which is a record of what SurfAI did rather
     than of what was said.
     """
-    directive = await _chat(payload, session, user, orchestrator)
+    if payload.browser_control:
+        directive = await _browser_chat(payload)
+    else:
+        directive = await _chat(payload, session, user, orchestrator)
 
     if directive.get("type") == "answer":
         page = _merge_page(payload.page_context, payload.tab_context)
         _record(ConversationRepository(user.id), payload, directive, page)
 
     return directive
+
+
+async def _browser_chat(payload: ChatRequest) -> dict:
+    """Answer by driving a browser through Playwright MCP.
+
+    A separate path from `_chat` on purpose. The orchestrator acts on the tab
+    the user is looking at, through the content script; this acts on whatever
+    browser the MCP server was pointed at, which is a different browser unless
+    that server was started with --cdp-endpoint or --extension. Routing to it
+    by accident would act on a page the user cannot see, so it is only ever
+    reached when the request asked for it.
+    """
+    client = build_client()
+    if client is None:
+        return _answer(
+            "Browser control is switched off. Start a Playwright MCP server and set "
+            "MCP_ENABLED and MCP_SERVER_URL on the backend to turn it on.",
+            intent="browse_task",
+        )
+
+    reply = await BrowserAgent(get_provider(), client).run(payload.message)
+    return _answer(
+        reply.message,
+        intent="browse_task",
+        warnings=reply.warnings,
+        steps=[
+            {"name": step.name, "ok": step.ok, "summary": step.summary}
+            for step in reply.steps
+        ],
+    )
 
 
 async def _chat(

@@ -87,6 +87,8 @@ export class AgentRunner {
       maxElements?: number;
       maxTextChars?: number;
       stepTextChars?: number;
+      /** Drive a browser through MCP instead of the user's own tab. */
+      browserControl?: boolean;
       actionTimeoutMs?: number;
     } = {},
   ) {}
@@ -154,6 +156,7 @@ export class AgentRunner {
       const directive = await api.chat({
         message,
         conversation_id: this.conversationId,
+        browser_control: this.options.browserControl,
         page_context: page,
         tab_context: tab,
         history,

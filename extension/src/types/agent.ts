@@ -42,6 +42,8 @@ export interface Directive {
   conversation_id?: string | null;
   /** Cards to render under the reply. */
   results?: ResultItem[];
+  /** Browser tool calls made while answering, shown under the reply. */
+  steps?: Array<{ name: string; ok: boolean; summary: string }>;
 }
 
 /** One line in the Agent Activity log. */

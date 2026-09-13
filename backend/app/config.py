@@ -85,6 +85,34 @@ class Settings(BaseSettings):
     task_timeout_s: int = 300
 
     # --- Context budget --------------------------------------------------
+    # --- browser control via MCP -------------------------------------
+    #
+    # Off by default. Driving the browser needs a Playwright MCP server
+    # running beside the browser itself, which the hosted deployment can never
+    # have: a function on Vercel cannot reach a Chrome on somebody's laptop.
+    # Everything SurfAI did before this works unchanged when it is off.
+    mcp_enabled: bool = False
+    mcp_server_url: str = ""
+    mcp_timeout_s: float = 60.0
+    #: Ceiling on browser tool calls in one task, independent of agent steps.
+    #: A model that has got stuck clicking the same thing should stop.
+    mcp_max_tool_calls: int = 12
+    #: Ceiling on one tool result. A Playwright accessibility snapshot of a
+    #: real site runs past 20,000 characters, which is ~5,000 tokens and most
+    #: of a free tier's per-minute budget in a single call. Measured: doing
+    #: that twice rate-limited the model mid-task.
+    mcp_max_result_chars: int = 6000
+    #: Optional comma-separated allowlist of tool names to expose, e.g.
+    #: "browser_navigate,browser_snapshot,browser_click". Empty means every
+    #: tool the server offers.
+    #:
+    #: Tools are still discovered from the server, never hard-coded; this only
+    #: narrows what is forwarded to the model. It exists because the schemas
+    #: are the dominant token cost: all 24 of Playwright MCP's tools come to
+    #: roughly 5,000 tokens on *every* turn, which on a free tier allowing
+    #: 8,000 a minute leaves no room for the page or the answer. Measured.
+    mcp_tool_filter: str = ""
+
     max_elements_in_context: int = 60
     # What the model is allowed to see of a page's text. Was 1200, about two
     # hundred words, which meant an answer "about this page" was really about
