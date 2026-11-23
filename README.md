@@ -103,6 +103,25 @@ lexical-first, so recall keeps working with no model reachable.
 
 ---
 
+## Project structure
+
+```
+backend/      FastAPI service: agents, security layer, LLM client, MCP client, migrations, tests
+extension/    Chrome extension (React + TypeScript side panel, service worker, content script)
+shared/       Action and tool schemas shared by the extension and backend
+demo/         Test pages for the acting path, including a deliberately hostile one
+docker-compose.yml, vercel.json, .env.example   Deployment and configuration
+```
+
+## Tech stack
+
+- Backend: Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL, httpx
+- Extension: TypeScript, React, Vite, Vitest (Chrome Manifest V3)
+- LLM: any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM, hosted)
+- Deployment: Docker Compose, Vercel
+
+---
+
 ## Quick run
 
 Needs Docker with Compose, Node.js 20+, Chrome 116+, and an LLM runtime.
